@@ -20,6 +20,12 @@ import ProtectedRoute from '@/components/core/ProtectedRoute';
 const ALL_FILTER = "all";
 const PROVIDER_NAME = 'digiflazz'; // Specific to this page
 
+const themedPanelClass = "rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-md dark:border-zinc-800 dark:bg-zinc-950";
+const themedInputClass = "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+const themedSelectTriggerClass = "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+const themedSelectContentClass = "border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+const themedOutlineButtonClass = "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+
 function getNamespacedProductIdentifier(productCode: string): string {
   return `${PROVIDER_NAME}::${productCode}`;
 }
@@ -174,8 +180,8 @@ export default function PriceSettingsPage() {
 
   if ((isLoadingProducts || isLoadingInitialSettings) && !isRefreshing) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-muted-foreground">
-        <Loader2 className="h-12 w-12 animate-spin mb-4 text-primary" />
+      <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-[var(--ui-text-muted)] dark:text-zinc-400">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin text-[var(--ui-accent)]" />
         <p className="text-lg">Loading products and price settings...</p>
       </div>
     );
@@ -199,45 +205,50 @@ export default function PriceSettingsPage() {
 
   return (
     <ProtectedRoute requiredPermission='pengaturan_harga_digiflazz'>
-    <div className="space-y-8">
-      <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-            <Settings className="h-7 w-7 text-primary" />
-            <h1 className="text-2xl sm:text-3xl font-bold font-headline">Digiflazz Price Settings (Database)</h1>
+    <div className="mx-auto max-w-7xl space-y-8 pb-10">
+      <section className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--ui-accent-gradient-from)] to-[var(--ui-accent-gradient-to)] text-white shadow-lg">
+            <Settings className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold font-headline tracking-tight text-[var(--ui-text)] dark:text-zinc-100">Digiflazz Price Settings (Database)</h1>
+            <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">Atur harga jual custom Digiflazz dengan tampilan yang mengikuti UI theme global.</p>
+          </div>
         </div>
-        <Button onClick={() => loadProductsAndDbSettings(true)} disabled={isRefreshing || isSaving} className="w-full sm:w-auto" variant="outline">
+        <Button onClick={() => loadProductsAndDbSettings(true)} disabled={isRefreshing || isSaving} className={`w-full sm:w-auto ${themedOutlineButtonClass}`} variant="outline">
             {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             {isRefreshing ? 'Refreshing...' : 'Refresh Product List'}
         </Button>
       </section>
-      <CardDescription>
+      <CardDescription className="max-w-4xl text-sm leading-6 text-[var(--ui-text-muted)] dark:text-zinc-400">
         Set custom selling prices for <strong>Digiflazz products</strong>. Prices are stored in the database. 
         If a custom price is not set or is 0, a default markup will be applied.
         Confirm changes with your admin password. For TokoVoucher price settings, please visit the{' '}
-        <Link href="/tokovoucher-price-settings" className="text-primary underline hover:text-primary/80">
+        <Link href="/tokovoucher-price-settings" className="font-semibold text-[var(--ui-accent)] underline underline-offset-4 hover:text-[var(--ui-accent-hover)]">
           TokoVoucher Price Settings page
         </Link>.
       </CardDescription>
 
-      <Card className="shadow-md">
+      <Card className={themedPanelClass}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl font-headline">
-            <Filter className="h-5 w-5 text-primary"/>
+          <CardTitle className="flex items-center gap-2 text-xl font-headline text-[var(--ui-text)] dark:text-zinc-100">
+            <Filter className="h-5 w-5 text-[var(--ui-accent)]"/>
             Filter Digiflazz Products
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="category-filter" className="text-sm font-medium">Category</Label>
+            <Label htmlFor="category-filter" className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100">Category</Label>
             <Select 
               value={selectedCategory} 
               onValueChange={setSelectedCategory}
               disabled={isLoadingProducts || isRefreshing || isLoadingInitialSettings}
             >
-              <SelectTrigger id="category-filter">
+              <SelectTrigger id="category-filter" className={themedSelectTriggerClass}>
                 <SelectValue placeholder="Select Category" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className={themedSelectContentClass}>
                 {uniqueCategories.map(cat => (
                   <SelectItem key={cat} value={cat}>
                     {cat === ALL_FILTER ? "All Categories" : cat}
@@ -247,16 +258,16 @@ export default function PriceSettingsPage() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="brand-filter" className="text-sm font-medium">Brand</Label>
+            <Label htmlFor="brand-filter" className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100">Brand</Label>
             <Select 
               value={selectedBrand} 
               onValueChange={setSelectedBrand}
               disabled={isLoadingProducts || isRefreshing || isLoadingInitialSettings || (selectedCategory !== ALL_FILTER && uniqueBrands.length <=1)}
             >
-              <SelectTrigger id="brand-filter">
+              <SelectTrigger id="brand-filter" className={themedSelectTriggerClass}>
                 <SelectValue placeholder="Select Brand" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className={themedSelectContentClass}>
                 {uniqueBrands.map(brand => (
                   <SelectItem key={brand} value={brand}>
                     {brand === ALL_FILTER ? "All Brands" : brand}
@@ -268,33 +279,33 @@ export default function PriceSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-lg">
+      <Card className={`${themedPanelClass} overflow-hidden`}>
         <CardContent className="pt-6">
           {(isLoadingProducts || isLoadingInitialSettings) && isRefreshing && (
-             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin mb-3" />
+             <div className="flex flex-col items-center justify-center py-10 text-[var(--ui-text-muted)] dark:text-zinc-400">
+                <Loader2 className="mb-3 h-8 w-8 animate-spin text-[var(--ui-accent)]" />
                 <p>Refreshing product list and settings...</p>
             </div>
           )}
           {!isRefreshing && products.length === 0 && !isLoadingProducts && !isLoadingInitialSettings &&(
-            <p className="text-muted-foreground text-center py-4">No products found from Digiflazz.</p>
+            <p className="py-4 text-center text-[var(--ui-text-muted)] dark:text-zinc-400">No products found from Digiflazz.</p>
           )}
           {!isRefreshing && filteredProducts.length === 0 && products.length > 0 && !isLoadingInitialSettings && (
-             <p className="text-muted-foreground text-center py-4">No products match the current filters.</p>
+             <p className="py-4 text-center text-[var(--ui-text-muted)] dark:text-zinc-400">No products match the current filters.</p>
           )}
           {!isRefreshing && !isLoadingInitialSettings && filteredProducts.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">Product Name</TableHead>
-                    <TableHead className="min-w-[120px]">Brand</TableHead>
-                    <TableHead className="min-w-[120px]">Category</TableHead>
-                    <TableHead className="min-w-[100px]">SKU</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Cost Price (Modal)</TableHead>
-                    <TableHead className="text-right min-w-[180px]">Custom Selling Price (DB)</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Est. Profit</TableHead>
-                    <TableHead className="text-center min-w-[100px]">Actions</TableHead>
+            <div className="overflow-x-auto rounded-2xl border border-[var(--ui-border)] dark:border-zinc-800">
+              <Table className="text-[var(--ui-text)] dark:text-zinc-100">
+                <TableHeader className="[&_tr]:border-[var(--ui-border)] dark:[&_tr]:border-zinc-800">
+                  <TableRow className="bg-[var(--ui-card-alt)] hover:bg-[var(--ui-card-alt)] dark:bg-zinc-900 dark:hover:bg-zinc-900">
+                    <TableHead className="min-w-[200px] text-[var(--ui-text-muted)] dark:text-zinc-400">Product Name</TableHead>
+                    <TableHead className="min-w-[120px] text-[var(--ui-text-muted)] dark:text-zinc-400">Brand</TableHead>
+                    <TableHead className="min-w-[120px] text-[var(--ui-text-muted)] dark:text-zinc-400">Category</TableHead>
+                    <TableHead className="min-w-[100px] text-[var(--ui-text-muted)] dark:text-zinc-400">SKU</TableHead>
+                    <TableHead className="text-right min-w-[120px] text-[var(--ui-text-muted)] dark:text-zinc-400">Cost Price (Modal)</TableHead>
+                    <TableHead className="text-right min-w-[180px] text-[var(--ui-text-muted)] dark:text-zinc-400">Custom Selling Price (DB)</TableHead>
+                    <TableHead className="text-right min-w-[120px] text-[var(--ui-text-muted)] dark:text-zinc-400">Est. Profit</TableHead>
+                    <TableHead className="text-center min-w-[100px] text-[var(--ui-text-muted)] dark:text-zinc-400">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -306,14 +317,17 @@ export default function PriceSettingsPage() {
                     const profit = effectiveSellingPrice - costPrice;
 
                     return (
-                      <TableRow key={product.buyer_sku_code} className={!product.buyer_product_status || !product.seller_product_status ? 'opacity-50 bg-muted/30' : ''}>
+                      <TableRow
+                        key={product.buyer_sku_code}
+                        className={`border-[var(--ui-border)] hover:bg-[var(--ui-accent-bg)] dark:border-zinc-800 dark:hover:bg-zinc-900/70 ${!product.buyer_product_status || !product.seller_product_status ? 'bg-[var(--ui-card-alt)] opacity-60 dark:bg-zinc-900' : ''}`}
+                      >
                         <TableCell className="font-medium">
                           {product.product_name}
                           {(!product.buyer_product_status || !product.seller_product_status) && <span className="text-xs text-red-500 ml-1">(Inactive)</span>}
                         </TableCell>
                         <TableCell>{product.brand}</TableCell>
                         <TableCell>{product.category}</TableCell>
-                        <TableCell className="text-xs font-mono">{product.buyer_sku_code}</TableCell>
+                        <TableCell className="text-xs font-mono text-[var(--ui-text-secondary)] dark:text-zinc-500">{product.buyer_sku_code}</TableCell>
                         <TableCell className="text-right">Rp {costPrice.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <Input
@@ -321,7 +335,7 @@ export default function PriceSettingsPage() {
                             placeholder={`Default: Rp ${getDefaultMarkupPrice(costPrice).toLocaleString()}`}
                             value={customPrices[namespacedKey] || ''}
                             onChange={(e) => handlePriceChange(product.buyer_sku_code, e.target.value)}
-                            className="min-w-[150px] text-right h-9"
+                            className={`${themedInputClass} h-9 min-w-[150px] text-right`}
                             disabled={isSaving || isRefreshing || isLoadingProducts || isLoadingInitialSettings}
                           />
                         </TableCell>
@@ -334,7 +348,7 @@ export default function PriceSettingsPage() {
                             size="sm" 
                             onClick={() => handleClearCustomPrice(product.buyer_sku_code)}
                             disabled={isSaving || isRefreshing || isLoadingProducts || isLoadingInitialSettings || typeof customPrices[namespacedKey] === 'undefined'}
-                            className="text-xs text-muted-foreground hover:text-destructive"
+                            className="text-xs text-[var(--ui-text-muted)] hover:bg-destructive/10 hover:text-destructive dark:text-zinc-400"
                             title="Clear custom price & use default markup"
                            >
                              Clear
@@ -349,33 +363,33 @@ export default function PriceSettingsPage() {
           )}
         </CardContent>
       </Card>
-      <Card className="mt-6 shadow-md">
+      <Card className={`${themedPanelClass} mt-6`}>
           <CardHeader>
-              <CardTitle className="text-lg font-medium text-destructive flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-lg font-medium text-[var(--ui-accent)]">
                   <Lock className="h-5 w-5" />
                   Confirm Changes
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">
                   Enter your admin password to save all price settings to the database. This will save settings for Digiflazz and preserve existing settings for other providers.
               </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
               <div>
-                  <Label htmlFor="admin-password-confirmation" className="text-sm font-medium">Admin Password</Label>
+                  <Label htmlFor="admin-password-confirmation" className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100">Admin Password</Label>
                   <Input
                       id="admin-password-confirmation"
                       type="password"
                       value={adminPasswordConfirmation}
                       onChange={(e) => setAdminPasswordConfirmation(e.target.value)}
                       placeholder="Enter your admin password"
-                      className="mt-1 border-destructive focus:border-destructive"
+                      className={`${themedInputClass} mt-1 border-[var(--ui-accent)]/30 focus-visible:ring-[var(--ui-accent)]`}
                       disabled={isSaving || isRefreshing || isLoadingProducts || isLoadingInitialSettings}
                   />
               </div>
               <Button 
                 onClick={handleSaveSettings} 
                 disabled={isSaving || isRefreshing || isLoadingProducts || isLoadingInitialSettings || !adminPasswordConfirmation} 
-                className="w-full sm:w-auto bg-primary hover:bg-primary/90"
+                className="w-full rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)] sm:w-auto"
               >
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save All Settings to Database

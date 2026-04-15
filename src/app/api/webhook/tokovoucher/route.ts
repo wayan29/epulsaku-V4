@@ -28,7 +28,7 @@ function getSenderIP(request: NextRequest): string {
   if (xRealIp) {
     return xRealIp.trim();
   }
-  return request.ip || request.headers.get('remote_addr') || 'Unknown IP';
+  return request.headers.get('remote_addr') || 'Unknown IP';
 }
 
 

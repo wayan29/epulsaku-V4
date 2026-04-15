@@ -1,18 +1,11 @@
 // src/lib/auth-utils.ts
 
-// This file contains constants and types related to authentication.
-// It does NOT contain any server-side logic and is safe to import into client components.
-
-import jwt from 'jsonwebtoken';
 import { LayoutDashboard, ShoppingCart, History, TrendingUp, Wrench, MessageSquare, UserCog, Settings, DollarSign, ShieldAlert, UserPlus, KeyRound, ShieldCheck, Contact, Phone, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { UiThemeName } from './ui-theme';
 
 // --- CONSTANTS ---
 export const SALT_ROUNDS = 10;
-export const JWT_SECRET = process.env.JWT_SECRET;
-export const JWT_EXPIRATION = '8h'; // Shortened session timeout
-export const JWT_REMEMBER_ME_EXPIRATION = '7d'; // Shortened "remember me" timeout
-export const AUTH_COOKIE_NAME = 'ePulsakuAuthToken_v1';
 export const MAX_ATTEMPTS = 5;
 export const LOCKOUT_PERIOD_MS = 2 * 60 * 1000;
 
@@ -24,6 +17,7 @@ export interface User {
   username: string;
   role: UserRole;
   permissions: string[]; // Added user-specific permissions
+  uiThemePreference?: UiThemeName;
 }
 
 export interface StoredUser {
@@ -38,6 +32,7 @@ export interface StoredUser {
   telegramChatId?: string;
   isDisabled?: boolean;
   failedPinAttempts?: number;
+  uiThemePreference?: UiThemeName;
 }
 
 export interface LoginActivity {
@@ -58,19 +53,41 @@ export interface UserUpdatePayload {
     telegramChatId?: string;
 }
 
-// Function to generate a JWT
-export function generateToken(user: User, rememberMe?: boolean): string {
-    if (!JWT_SECRET) {
-      throw new Error("JWT_SECRET is not configured on the server.");
-    }
-    const payload = {
-        userId: user.id,
-        username: user.username,
-        role: user.role,
-        permissions: user.permissions, // Include permissions in the token
-    };
-    const expiresIn = rememberMe ? JWT_REMEMBER_ME_EXPIRATION : JWT_EXPIRATION;
-    return jwt.sign(payload, JWT_SECRET, { expiresIn });
+type UserLike = Pick<User, 'role' | 'permissions'> | null | undefined;
+
+export function normalizeUserRole(role: string | null | undefined): UserRole | null {
+    if (!role) return null;
+
+    const normalized = role.trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+    if (normalized === 'super_admin' || normalized === 'superadmin' || normalized === 'owner') return 'super_admin';
+    if (normalized === 'admin') return 'admin';
+    if (normalized === 'staf' || normalized === 'staff') return 'staf';
+
+    return null;
+}
+
+export function isSuperAdminRole(role: string | null | undefined): boolean {
+    return normalizeUserRole(role) === 'super_admin';
+}
+
+export function hasAllAccess(permissions: string[] | null | undefined): boolean {
+    return !!permissions?.includes('all_access');
+}
+
+export function hasPermission(user: UserLike, requiredPermission: string): boolean {
+    if (!user) return false;
+
+    const effectivePermission = requiredPermission === 'shift_handover'
+      ? 'riwayat_transaksi'
+      : requiredPermission;
+
+    return (
+        isSuperAdminRole(user.role) ||
+        hasAllAccess(user.permissions) ||
+        user.permissions?.includes(effectivePermission) === true ||
+        user.permissions?.includes(requiredPermission) === true
+    );
 }
 
 // --- Menu Permissions ---
@@ -80,7 +97,7 @@ export interface AppMenu {
     label: string;
     description: string;
     icon?: LucideIcon;
-    roles?: ('admin' | 'staf')[]; // Optional: for default roles if needed
+    roles?: UserRole[]; // Optional: for default roles if needed
 }
 
 export const ALL_APP_MENUS: AppMenu[] = [
@@ -88,6 +105,7 @@ export const ALL_APP_MENUS: AppMenu[] = [
   { key: 'layanan_digiflazz', href: '/layanan/digiflazz', label: 'Layanan Digiflazz', icon: ShoppingCart, description: 'Akses produk dari Digiflazz.' },
   { key: 'layanan_tokovoucher', href: '/order/tokovoucher', label: 'Layanan TokoVoucher', icon: ShoppingCart, description: 'Akses produk dari TokoVoucher.' },
   { key: 'riwayat_transaksi', href: '/transactions', label: 'Riwayat Transaksi', icon: History, description: 'Lihat semua log transaksi.' },
+  { key: 'shift_handover', href: '/shift-handover', label: 'Shift Handover', icon: ShieldCheck, description: 'Catatan operasional pergantian sif.' },
   { key: 'laporan_profit', href: '/profit-report', label: 'Laporan Profit & Statement', icon: TrendingUp, description: 'Analisis keuntungan dan detail transaksi.' },
   { key: 'cek_nickname_game', href: '/tools/game-nickname-checker', label: 'Cek Nickname Game', icon: Contact, description: 'Alat bantu cek ID game.' },
   { key: 'cek_id_pln', href: '/tools/pln-checker', label: 'Cek ID Pelanggan PLN', icon: Zap, description: 'Alat bantu cek ID PLN.' },

@@ -80,6 +80,25 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
     { label: "BRI Virtual Account", value: "briva", icon: CreditCard },
   ];
 
+  const themedDialogClass =
+    "sm:max-w-lg border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+  const themedLabelClass =
+    "flex items-center font-medium text-[var(--ui-text)] dark:text-zinc-100";
+  const themedInputClass =
+    "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedSelectTriggerClass =
+    "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedSelectContentClass =
+    "border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+  const themedOutlineButtonClass =
+    "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedPrimaryButtonClass =
+    "rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+  const themedMutedTextClass =
+    "text-[var(--ui-text-muted)] dark:text-zinc-400";
+  const themedInfoCardClass =
+    "rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] dark:border-zinc-800 dark:bg-zinc-900";
+
   const handleDialogClose = () => {
     form.reset();
     setIsLoading(false);
@@ -156,17 +175,17 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isLoading || !isOpen) handleDialogClose(); else onOpenChange(isOpen);}}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={themedDialogClass}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <PiggyBank className="h-6 w-6 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-[var(--ui-text)] dark:text-zinc-100">
+            <PiggyBank className="h-6 w-6 text-[var(--ui-accent)]" />
             Request TokoVoucher Deposit
           </DialogTitle>
-          {!depositResult && (
-            <DialogDescription>
-              Fill in to request a TokoVoucher deposit ticket. PIN required.
-            </DialogDescription>
-          )}
+          <DialogDescription className={themedMutedTextClass}>
+            {depositResult
+              ? "Review the result of your TokoVoucher deposit request and complete the payment with the instructions shown below."
+              : "Fill in to request a TokoVoucher deposit ticket. PIN required."}
+          </DialogDescription>
         </DialogHeader>
 
         {!depositResult ? (
@@ -177,9 +196,9 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
                 name="nominal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center"><Info className="mr-2 h-4 w-4 text-muted-foreground" />Amount</FormLabel>
+                    <FormLabel className={themedLabelClass}><Info className="mr-2 h-4 w-4 text-[var(--ui-accent)]" />Amount</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 50000" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} />
+                      <Input type="number" placeholder="e.g., 50000" className={themedInputClass} {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -190,18 +209,18 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
                 name="kode_bayar"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center"><Landmark className="mr-2 h-4 w-4 text-muted-foreground" />Payment Method</FormLabel>
+                    <FormLabel className={themedLabelClass}><Landmark className="mr-2 h-4 w-4 text-[var(--ui-accent)]" />Payment Method</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className={themedSelectTriggerClass}>
                           <SelectValue placeholder="Select payment method" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent className={themedSelectContentClass}>
                         {paymentMethodOptions.map(option => (
                           <SelectItem key={option.value} value={option.value}>
                             <div className="flex items-center gap-2">
-                              {option.icon && <option.icon className="h-4 w-4 text-muted-foreground" />}
+                              {option.icon && <option.icon className={`h-4 w-4 ${themedMutedTextClass}`} />}
                               {option.label}
                             </div>
                           </SelectItem>
@@ -212,8 +231,8 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
                   </FormItem>
                 )}
               />
-              <div className="space-y-2 py-4 bg-muted/70 rounded-lg p-4 my-2">
-                <FormLabel htmlFor="pinTokoVoucherDeposit" className="flex items-center justify-center text-sm font-medium text-foreground/80">
+              <div className={`my-2 space-y-2 rounded-2xl p-4 py-4 ${themedInfoCardClass}`}>
+                <FormLabel htmlFor="pinTokoVoucherDeposit" className={`flex items-center justify-center text-sm font-medium ${themedMutedTextClass}`}>
                   <KeyRound className="mr-2 h-4 w-4" />
                   Transaction PIN
                 </FormLabel>
@@ -228,7 +247,7 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
                           type="password"
                           placeholder="● ● ● ● ● ●"
                           maxLength={6}
-                          className="text-center tracking-[0.5em] text-xl bg-background border-primary/50 focus:border-primary"
+                          className={`text-center tracking-[0.5em] text-xl ${themedInputClass}`}
                           {...field}
                         />
                       </FormControl>
@@ -239,9 +258,9 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
               </div>
               <DialogFooter className="pt-2">
                 <DialogClose asChild>
-                  <Button type="button" variant="outline" disabled={isLoading}>Cancel</Button>
+                  <Button type="button" variant="outline" disabled={isLoading} className={themedOutlineButtonClass}>Cancel</Button>
                 </DialogClose>
-                <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">
+                <Button type="submit" disabled={isLoading} className={themedPrimaryButtonClass}>
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Request Ticket
                 </Button>
@@ -252,11 +271,11 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
           <div className="py-4 space-y-4">
             {depositResult.isSuccess && depositResult.data ? (
               <>
-                <div className="p-4 bg-green-50 border border-green-200 rounded-md text-green-700 space-y-2">
+                <div className="space-y-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-green-700">
                   <h3 className="font-semibold text-lg flex items-center"><CheckCircle className="h-5 w-5 mr-2"/>Deposit Ticket Created!</h3>
                   <p>Please complete your payment using the details below. RC: {depositResult.rc}</p>
                 </div>
-                <div className="space-y-3 text-sm">
+                <div className="space-y-3 text-sm text-[var(--ui-text)] dark:text-zinc-100">
                   <p><strong>Metode:</strong> {depositResult.data.metode}</p>
 
                   {depositResult.data.metode.toLowerCase().includes("qris") && depositResult.data.pay.startsWith("https://") ? (
@@ -265,12 +284,12 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
                       <Image src={depositResult.data.pay} alt="QRIS Payment" width={250} height={250} className="mx-auto rounded-md border shadow-md" data-ai-hint="qr code" />
                     </div>
                   ) : (
-                    <div className="flex justify-between items-center p-3 bg-card rounded-md border">
+                    <div className={`flex items-center justify-between rounded-2xl p-3 ${themedInfoCardClass}`}>
                       <div>
-                        <span className="text-muted-foreground">{depositResult.data.metode.toLowerCase().includes("virtual") ? "Virtual Account:" : "No. Rekening:"}</span>
-                        <p className="font-bold text-lg text-primary">{depositResult.data.pay}</p>
+                        <span className={themedMutedTextClass}>{depositResult.data.metode.toLowerCase().includes("virtual") ? "Virtual Account:" : "No. Rekening:"}</span>
+                        <p className="text-lg font-bold text-[var(--ui-accent)]">{depositResult.data.pay}</p>
                       </div>
-                       <Button variant="ghost" size="sm" onClick={() => copyToClipboard(depositResult.data.pay, 'Payment Number')}>
+                       <Button variant="ghost" size="sm" className="text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-100" onClick={() => copyToClipboard(depositResult.data!.pay, 'Payment Number')}>
                          <Copy className="h-4 w-4 mr-1" /> Copy
                        </Button>
                     </div>
@@ -278,34 +297,34 @@ export default function TokoVoucherDepositDialog({ open, onOpenChange, onDeposit
 
                   {depositResult.data.pay_name && <p><strong>Atas Nama:</strong> {depositResult.data.pay_name}</p>}
 
-                  <div className="flex justify-between items-center p-3 bg-card rounded-md border">
+                  <div className={`flex items-center justify-between rounded-2xl p-3 ${themedInfoCardClass}`}>
                     <div>
-                      <span className="text-muted-foreground">Total Transfer:</span>
-                      <p className="font-bold text-xl text-primary">Rp {depositResult.data.total_transfer.toLocaleString()}</p>
+                      <span className={themedMutedTextClass}>Total Transfer:</span>
+                      <p className="text-xl font-bold text-[var(--ui-accent)]">Rp {depositResult.data.total_transfer.toLocaleString()}</p>
                     </div>
-                     <Button variant="ghost" size="sm" onClick={() => copyToClipboard(depositResult.data.total_transfer, 'Total Transfer')}>
+                     <Button variant="ghost" size="sm" className="text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-100" onClick={() => copyToClipboard(depositResult.data!.total_transfer, 'Total Transfer')}>
                        <Copy className="h-4 w-4 mr-1" /> Copy
                      </Button>
                   </div>
 
-                  <p className="text-xs">Nominal: Rp {depositResult.data.nominal.toLocaleString()}</p>
-                  {typeof depositResult.data.kode_unik === 'number' && <p className="text-xs">Kode Unik: {depositResult.data.kode_unik}</p>}
-                  {typeof depositResult.data.biaya_admin === 'number' && <p className="text-xs">Biaya Admin: Rp {depositResult.data.biaya_admin.toLocaleString()}</p>}
-                  <p className="text-xs">Dibuat: {new Date(depositResult.data.created).toLocaleDateString('id-ID')}</p>
-                  <p className="text-xs">Kadaluarsa: {new Date(depositResult.data.expired_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                  <p className={`text-xs ${themedMutedTextClass}`}>Nominal: Rp {depositResult.data.nominal.toLocaleString()}</p>
+                  {typeof depositResult.data.kode_unik === 'number' && <p className={`text-xs ${themedMutedTextClass}`}>Kode Unik: {depositResult.data.kode_unik}</p>}
+                  {typeof depositResult.data.biaya_admin === 'number' && <p className={`text-xs ${themedMutedTextClass}`}>Biaya Admin: Rp {depositResult.data.biaya_admin.toLocaleString()}</p>}
+                  <p className={`text-xs ${themedMutedTextClass}`}>Dibuat: {new Date(depositResult.data.created).toLocaleDateString('id-ID')}</p>
+                  <p className={`text-xs ${themedMutedTextClass}`}>Kadaluarsa: {new Date(depositResult.data.expired_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>
                 </div>
                 <DialogFooter className="pt-4">
-                  <Button onClick={handleDialogClose} className="w-full">Close</Button>
+                  <Button onClick={handleDialogClose} className={`w-full ${themedPrimaryButtonClass}`}>Close</Button>
                 </DialogFooter>
               </>
             ) : (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 space-y-2">
+              <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
                 <h3 className="font-semibold text-lg flex items-center"><AlertTriangle className="h-5 w-5 mr-2"/>Deposit Request Failed</h3>
                 <p>{depositResult.message || "An unknown error occurred."}</p>
                 {depositResult.rc && <p className="text-xs">Response Code: {depositResult.rc}</p>}
                 <DialogFooter className="pt-4">
-                    <Button variant="outline" onClick={() => setDepositResult(null)} className="w-full sm:w-auto">Try Again</Button>
-                    <Button onClick={handleDialogClose} className="w-full sm:w-auto">Close</Button>
+                    <Button variant="outline" onClick={() => setDepositResult(null)} className={`w-full sm:w-auto ${themedOutlineButtonClass}`}>Try Again</Button>
+                    <Button onClick={handleDialogClose} className={`w-full sm:w-auto ${themedPrimaryButtonClass}`}>Close</Button>
                 </DialogFooter>
               </div>
             )}

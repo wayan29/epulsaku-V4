@@ -2,11 +2,11 @@
 "use client";
 
 import { ThemeProvider } from "./ThemeProvider";
+import { UiThemeProvider } from "@/contexts/UiThemeContext";
 import type { ReactNode } from "react";
+import type { UiThemeName } from "@/lib/ui-theme";
 
-// This is a wrapper to provide the theme to the entire app.
-// User/Auth context will be handled at a different level.
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({ children, resolvedUiTheme }: { children: ReactNode; resolvedUiTheme: UiThemeName }) {
   return (
     <ThemeProvider
       attribute="class"
@@ -14,7 +14,9 @@ export function Providers({ children }: { children: ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      {children}
+      <UiThemeProvider defaultTheme={resolvedUiTheme}>
+        {children}
+      </UiThemeProvider>
     </ThemeProvider>
   );
 }

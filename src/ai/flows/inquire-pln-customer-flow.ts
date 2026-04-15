@@ -12,6 +12,19 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import crypto from 'crypto';
 import { getAdminSettingsFromDB } from '@/lib/admin-settings-utils'; // Import new settings utility
+import {
+  getSavedPlnCustomerByLookupValue,
+  saveSuccessfulPlnValidation,
+  type SuccessfulPlnValidationData,
+} from '@/lib/savepln-utils';
+
+function normalizePlnLookupValue(value?: string | null): string {
+  if (!value) {
+    return '';
+  }
+
+  return value.replace(/\D/g, '').trim();
+}
 
 const InquirePlnCustomerInputSchema = z.object({
   customerNo: z.string().min(10, "Customer number must be at least 10 characters").describe('The PLN customer number (IDPEL or Nomor Meter).'),
@@ -26,6 +39,7 @@ const InquirePlnCustomerOutputSchema = z.object({
   segmentPower: z.string().optional().describe('The segment power of the PLN customer (e.g., R1/900VA).'),
   message: z.string().optional().describe('An optional message, e.g., error message or status message.'),
   rawResponse: z.any().optional().describe('The raw response data from Digiflazz for debugging.'),
+  source: z.enum(['cache', 'digiflazz']).optional().describe('Whether the inquiry came from the local savepln cache or Digiflazz directly.'),
 });
 export type InquirePlnCustomerOutput = z.infer<typeof InquirePlnCustomerOutputSchema>;
 
@@ -40,7 +54,31 @@ const inquirePlnCustomerFlow = ai.defineFlow(
     inputSchema: InquirePlnCustomerInputSchema,
     outputSchema: InquirePlnCustomerOutputSchema,
   },
-  async (input) => {
+  async (input): Promise<InquirePlnCustomerOutput> => {
+    const normalizedCustomerNo = normalizePlnLookupValue(input.customerNo);
+    if (!normalizedCustomerNo) {
+      return {
+        isSuccess: false,
+        message: 'Customer number is required.',
+      };
+    }
+
+    const savedCustomer = await getSavedPlnCustomerByLookupValue(normalizedCustomerNo);
+    if (savedCustomer) {
+      return {
+        isSuccess: true,
+        customerName: savedCustomer.customerName,
+        meterNo: savedCustomer.meterNo,
+        subscriberId: savedCustomer.subscriberId,
+        segmentPower: savedCustomer.segmentPower,
+        message:
+          savedCustomer.message ||
+          'Data pelanggan PLN diambil dari riwayat pelanggan tersimpan.',
+        rawResponse: savedCustomer.rawResponse,
+        source: 'cache',
+      };
+    }
+
     const adminSettings = await getAdminSettingsFromDB();
     const username = adminSettings.digiflazzUsername;
     const apiKey = adminSettings.digiflazzApiKey;
@@ -99,15 +137,20 @@ const inquirePlnCustomerFlow = ai.defineFlow(
       // Expected success structure for PLN inquiry (rc: "00" and customer name exists)
       // Using responseData.data.name as per the documentation provided
       if (responseData.data && String(responseData.data.rc) === '00' && responseData.data.name) {
-        return {
+        const successfulResult: SuccessfulPlnValidationData & InquirePlnCustomerOutput = {
           isSuccess: true,
-          customerName: responseData.data.name.trim(), // Trim whitespace from the name
+          customerName: responseData.data.name.trim(),
           meterNo: responseData.data.meter_no,
           subscriberId: responseData.data.subscriber_id,
           segmentPower: responseData.data.segment_power,
           message: responseData.data.message || 'Inquiry successful.',
           rawResponse: responseData,
+          source: 'digiflazz',
         };
+
+        await saveSuccessfulPlnValidation(normalizedCustomerNo, successfulResult);
+
+        return successfulResult;
       } else {
         // If rc is "00" but data.name is missing, or other unexpected structure
         console.error('Unexpected Digiflazz API success response structure (PLN Inquiry):', responseData);

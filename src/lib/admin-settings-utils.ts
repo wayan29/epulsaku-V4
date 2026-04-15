@@ -60,6 +60,7 @@ function decrypt(encryptedText: string): string | null {
 
 
 export interface AdminSettings {
+  _id?: string;
   digiflazzUsername?: string;
   digiflazzApiKey?: string;
   digiflazzWebhookSecret?: string;
@@ -70,6 +71,7 @@ export interface AdminSettings {
   tokovoucherKey?: string;
   telegramBotToken?: string;
   telegramChatId?: string;
+  globalUiTheme?: string;
 }
 
 const sensitiveFields: (keyof AdminSettings)[] = [

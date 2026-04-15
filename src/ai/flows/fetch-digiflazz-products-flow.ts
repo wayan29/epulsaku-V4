@@ -2,7 +2,9 @@
 'use server';
 /**
  * @fileOverview A Genkit flow for fetching product list from Digiflazz API.
- * Implements a simple in-memory cache that refreshes every 15 seconds.
+ * Uses MongoDB collection 'dgcache' as persistent cache.
+ * Normal loads read from DB. Only forceRefresh=true calls the Digiflazz API
+ * and updates the DB cache.
  *
  * - fetchDigiflazzProducts - A function that calls the Digiflazz product fetching flow.
  * - DigiflazzProduct - The type for a single Digiflazz product.
@@ -13,45 +15,77 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import crypto from 'crypto';
-import { getAdminSettingsFromDB } from '@/lib/admin-settings-utils'; // Import new settings utility
+import { getAdminSettingsFromDB } from '@/lib/admin-settings-utils';
+import { readDb, writeDb } from '@/lib/mongodb';
+
+const DGCACHE_COLLECTION = 'dgcache';
 
 // Define Zod schema for DigiflazzProduct based on the existing interface
 const DigiflazzProductSchema = z.object({
   product_name: z.string(),
   category: z.string(),
   brand: z.string(),
-  type: z.string().optional().nullable(), // Made nullable as API might send null
+  type: z.string().optional().nullable(),
   seller_name: z.string(),
   price: z.number(),
   buyer_sku_code: z.string(),
   buyer_product_status: z.boolean(),
   seller_product_status: z.boolean(),
-  unlimited_stock: z.boolean().optional().nullable(), // Made nullable
-  stock: z.number().optional().nullable(), // Made nullable
-  multi: z.boolean().optional().nullable(), // Made nullable
-  start_cut_off: z.string().optional().nullable(), // Made nullable
-  end_cut_off: z.string().optional().nullable(), // Made nullable
-  desc: z.string().optional().nullable(), // Made nullable
+  unlimited_stock: z.boolean().optional().nullable(),
+  stock: z.number().optional().nullable(),
+  multi: z.boolean().optional().nullable(),
+  start_cut_off: z.string().optional().nullable(),
+  end_cut_off: z.string().optional().nullable(),
+  desc: z.string().optional().nullable(),
 });
 
 export type DigiflazzProduct = z.infer<typeof DigiflazzProductSchema>;
 
 const FetchDigiflazzProductsInputSchema = z.object({
-  forceRefresh: z.boolean().optional().default(false).describe('If true, bypasses the cache and fetches directly from the API.'),
+  forceRefresh: z.boolean().optional().default(false).describe('If true, bypasses the DB cache and fetches directly from the Digiflazz API, then saves to DB.'),
 });
 export type FetchDigiflazzProductsInput = z.infer<typeof FetchDigiflazzProductsInputSchema>;
 
 const FetchDigiflazzProductsOutputSchema = z.array(DigiflazzProductSchema);
 export type FetchDigiflazzProductsOutput = z.infer<typeof FetchDigiflazzProductsOutputSchema>;
 
-// In-memory cache variables
-let cachedProducts: FetchDigiflazzProductsOutput | null = null;
-let lastFetchTimestamp: number | null = null;
-const CACHE_DURATION_MS = 15 * 1000; // 15 seconds
+// In-memory cache for ultra-fast repeated reads within the same server process
+let memCachedProducts: FetchDigiflazzProductsOutput | null = null;
+let memCacheTimestamp: number | null = null;
+const MEM_CACHE_DURATION_MS = 60 * 1000; // 1 minute in-memory TTL
 
 // This is the function you'll call from your client-side code.
 export async function fetchDigiflazzProducts(input?: FetchDigiflazzProductsInput): Promise<FetchDigiflazzProductsOutput> {
   return fetchDigiflazzProductsFlow(input || { forceRefresh: false });
+}
+
+/**
+ * Read products from the dgcache MongoDB collection.
+ */
+async function readProductsFromDB(): Promise<FetchDigiflazzProductsOutput | null> {
+  try {
+    const docs = await readDb<any[]>(DGCACHE_COLLECTION);
+    if (docs && Array.isArray(docs) && docs.length > 0) {
+      // Strip MongoDB _id fields before returning
+      return docs.map(({ _id, ...rest }) => rest) as FetchDigiflazzProductsOutput;
+    }
+    return null;
+  } catch (err) {
+    console.error('Error reading dgcache from DB:', err);
+    return null;
+  }
+}
+
+/**
+ * Write products to the dgcache MongoDB collection (replaces all existing data).
+ */
+async function writeProductsToDB(products: FetchDigiflazzProductsOutput): Promise<void> {
+  try {
+    await writeDb(DGCACHE_COLLECTION, products, { mode: 'replaceCollection' });
+    console.log(`dgcache updated in DB with ${products.length} products.`);
+  } catch (err) {
+    console.error('Error writing dgcache to DB:', err);
+  }
 }
 
 const fetchDigiflazzProductsFlow = ai.defineFlow(
@@ -63,18 +97,32 @@ const fetchDigiflazzProductsFlow = ai.defineFlow(
   async (input) => {
     const now = Date.now();
 
-    // Check cache first, only if not forceRefresh
-    if (!input.forceRefresh && cachedProducts && lastFetchTimestamp && (now - lastFetchTimestamp < CACHE_DURATION_MS)) {
-      console.log('Returning Digiflazz products from cache.');
-      return cachedProducts;
+    // ── If NOT a force refresh, try caches first ──
+    if (!input.forceRefresh) {
+      // 1. Check in-memory cache (fastest)
+      if (memCachedProducts && memCacheTimestamp && (now - memCacheTimestamp < MEM_CACHE_DURATION_MS)) {
+        console.log('Returning Digiflazz products from in-memory cache.');
+        return memCachedProducts;
+      }
+
+      // 2. Check MongoDB dgcache (persistent)
+      console.log('Reading Digiflazz products from dgcache DB...');
+      const dbProducts = await readProductsFromDB();
+      if (dbProducts && dbProducts.length > 0) {
+        // Populate in-memory cache from DB
+        memCachedProducts = dbProducts;
+        memCacheTimestamp = Date.now();
+        console.log(`Loaded ${dbProducts.length} products from dgcache DB.`);
+        return dbProducts;
+      }
+
+      // 3. DB is empty too — fall through to fetch from API
+      console.log('dgcache DB is empty. Fetching from Digiflazz API for initial population...');
+    } else {
+      console.log('Force refreshing Digiflazz products from API (manual refresh).');
     }
 
-    if (input.forceRefresh) {
-      console.log('Force refreshing Digiflazz products from API.');
-    } else {
-      console.log('Fetching Digiflazz products from API (cache stale or empty).');
-    }
-    
+    // ── Fetch from Digiflazz API ──
     const adminSettings = await getAdminSettingsFromDB();
     const username = adminSettings.digiflazzUsername;
     const apiKey = adminSettings.digiflazzApiKey;
@@ -139,9 +187,13 @@ const fetchDigiflazzProductsFlow = ai.defineFlow(
           }
         });
 
-        cachedProducts = products;
-        lastFetchTimestamp = Date.now();
-        console.log('Digiflazz products cache updated.');
+        // Save to MongoDB dgcache
+        await writeProductsToDB(products);
+
+        // Update in-memory cache
+        memCachedProducts = products;
+        memCacheTimestamp = Date.now();
+        console.log(`Digiflazz products fetched from API and saved to dgcache. Total: ${products.length}`);
 
         return products;
       } else {

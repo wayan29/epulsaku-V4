@@ -205,7 +205,7 @@ export default function ProfitReportPage() {
             const effectiveSellingPrice = getEffectiveSellingPrice(tx.buyerSkuCode, tx.provider, tx.costPrice);
             const profit = effectiveSellingPrice - tx.costPrice;
             const row = [
-                `"${formatDateInTimezone(tx.timestamp, "yyyy-MM-dd HH:mm:ss")}"`,
+                `"${formatDateInTimezone(tx.timestamp, "dd/MM/yy HH:mm")}"`,
                 `"${tx.productName.replace(/"/g, '""')}"`,
                 `"${tx.details.replace(/"/g, '""')}"`,
                 `"${tx.transactedBy || 'N/A'}"`,
@@ -243,8 +243,8 @@ export default function ProfitReportPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-muted-foreground">
-        <Loader2 className="h-12 w-12 animate-spin mb-4 text-primary" />
+      <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-[var(--ui-text-muted)] dark:text-zinc-400">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin text-[var(--ui-accent)]" />
         <p className="text-lg">Calculating profit report...</p>
       </div>
     );
@@ -252,7 +252,7 @@ export default function ProfitReportPage() {
 
   if (error) {
      return (
-      <Card className="text-center py-10 shadow border-destructive bg-destructive/10">
+      <Card className="border-destructive bg-destructive/10 py-10 text-center shadow">
         <CardHeader>
           <CardTitle className="text-destructive flex items-center justify-center gap-2">
             <AlertTriangle className="h-6 w-6" /> Error Loading Report
@@ -269,30 +269,35 @@ export default function ProfitReportPage() {
 
   return (
     <ProtectedRoute requiredPermission='laporan_profit'>
-    <div className="space-y-8">
-      <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <DollarSign className="h-7 w-7 text-primary" />
-          <h1 className="text-2xl sm:text-3xl font-bold font-headline">Laporan Profit & Statement</h1>
+    <div className="mx-auto max-w-7xl space-y-8 pb-10">
+      <section className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--ui-accent-gradient-from)] to-[var(--ui-accent-gradient-to)] text-white shadow-lg">
+            <DollarSign className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-serif font-bold tracking-tight text-[var(--ui-text)] dark:text-zinc-100 sm:text-3xl">Laporan Profit & Statement</h1>
+            <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">Lihat performa pendapatan, modal, dan profit dengan tampilan yang mengikuti UI theme global.</p>
+          </div>
         </div>
          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full"><Download className="mr-2 h-4 w-4" /> Download Laporan</Button>
+                <Button variant="outline" className="w-full rounded-xl border-[var(--ui-accent)]/20 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/10 hover:text-[var(--ui-accent-hover)]"><Download className="mr-2 h-4 w-4" /> Download Laporan</Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={handlePrint} disabled={filteredSuccessfulTransactions.length === 0}>
+              <DropdownMenuContent className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                <DropdownMenuItem onClick={handlePrint} disabled={filteredSuccessfulTransactions.length === 0} className="focus:bg-[var(--ui-accent-bg)] focus:text-[var(--ui-accent)]">
                   <Printer className="mr-2 h-4 w-4"/> Cetak Laporan
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDownloadPDF} disabled={filteredSuccessfulTransactions.length === 0}>
+                <DropdownMenuItem onClick={handleDownloadPDF} disabled={filteredSuccessfulTransactions.length === 0} className="focus:bg-[var(--ui-accent-bg)] focus:text-[var(--ui-accent)]">
                   <FileText className="mr-2 h-4 w-4"/> Download PDF
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDownloadCSV} disabled={filteredSuccessfulTransactions.length === 0}>
+                <DropdownMenuItem onClick={handleDownloadCSV} disabled={filteredSuccessfulTransactions.length === 0} className="focus:bg-[var(--ui-accent-bg)] focus:text-[var(--ui-accent)]">
                   <FileSpreadsheet className="mr-2 h-4 w-4"/> Download CSV (Excel)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button asChild className="w-full">
+            <Button asChild className="w-full rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]">
             <Link href="/price-settings">
                 <Settings className="mr-2 h-4 w-4" />
                 Price Settings
@@ -301,21 +306,22 @@ export default function ProfitReportPage() {
         </div>
       </section>
       
-      <Card className="shadow-md no-print">
-        <CardHeader>
-          <CardTitle className="text-xl font-headline">Filter Laporan</CardTitle>
-          <CardDescription>Pilih periode untuk melihat laporan profit dan detail transaksi.</CardDescription>
+      <Card className="relative overflow-hidden rounded-3xl border-[var(--ui-border)] bg-[var(--ui-surface)] shadow-md no-print dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[var(--ui-top-bar-from)] via-[var(--ui-top-bar-via)] to-[var(--ui-accent-gradient-to)] opacity-80" />
+        <CardHeader className="px-6 pt-6 sm:px-8">
+          <CardTitle className="text-xl font-headline text-[var(--ui-text)] dark:text-zinc-100">Filter Laporan</CardTitle>
+          <CardDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">Pilih periode untuk melihat laporan profit dan detail transaksi.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-6 pb-6 sm:px-8 sm:pb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
-              <Label htmlFor="date-filter-popover" className="text-sm font-medium">Rentang Tanggal Custom</Label>
+              <Label htmlFor="date-filter-popover" className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100">Rentang Tanggal Custom</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     id="date-filter-popover"
                     variant={"outline"}
-                    className={`w-full justify-start text-left font-normal mt-1 ${!dateRange?.from && "text-muted-foreground"}`}
+                    className={`mt-1 w-full justify-start rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-left font-normal text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 ${!dateRange?.from && "text-[var(--ui-text-secondary)] dark:text-zinc-500"}`}
                   >
                     <CalendarIconLucide className="mr-2 h-4 w-4" />
                     {dateRange?.from ? (
@@ -331,7 +337,7 @@ export default function ProfitReportPage() {
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto border-[var(--ui-border)] bg-[var(--ui-card)] p-0 dark:border-zinc-800 dark:bg-zinc-950" align="start">
                   <Calendar
                     initialFocus
                     mode="range"
@@ -344,14 +350,14 @@ export default function ProfitReportPage() {
               </Popover>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 md:pt-0">
-              <Button variant={activeFilterLabel === 'Today' ? 'default' : 'outline'} onClick={() => setDateFilter({ from: startOfDay(today), to: endOfDay(today) }, "Today")} className="w-full">Hari Ini</Button>
-              <Button variant={activeFilterLabel === 'This Week' ? 'default' : 'outline'} onClick={() => setDateFilter({ from: startOfWeek(today), to: endOfWeek(today) }, "This Week")} className="w-full">Minggu Ini</Button>
-              <Button variant={activeFilterLabel === 'This Month' ? 'default' : 'outline'} onClick={() => setDateFilter({ from: startOfMonth(today), to: endOfMonth(today) }, "This Month")} className="w-full">Bulan Ini</Button>
-              <Button variant={activeFilterLabel === 'This Year' ? 'default' : 'outline'} onClick={() => setDateFilter({ from: startOfYear(today), to: endOfYear(today) }, "This Year")} className="w-full">Tahun Ini</Button>
+              <Button variant="outline" onClick={() => setDateFilter({ from: startOfDay(today), to: endOfDay(today) }, "Today")} className={`w-full rounded-xl ${activeFilterLabel === 'Today' ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]' : 'border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'}`}>Hari Ini</Button>
+              <Button variant="outline" onClick={() => setDateFilter({ from: startOfWeek(today), to: endOfWeek(today) }, "This Week")} className={`w-full rounded-xl ${activeFilterLabel === 'This Week' ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]' : 'border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'}`}>Minggu Ini</Button>
+              <Button variant="outline" onClick={() => setDateFilter({ from: startOfMonth(today), to: endOfMonth(today) }, "This Month")} className={`w-full rounded-xl ${activeFilterLabel === 'This Month' ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]' : 'border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'}`}>Bulan Ini</Button>
+              <Button variant="outline" onClick={() => setDateFilter({ from: startOfYear(today), to: endOfYear(today) }, "This Year")} className={`w-full rounded-xl ${activeFilterLabel === 'This Year' ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]' : 'border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'}`}>Tahun Ini</Button>
             </div>
           </div>
           { (dateRange) && (
-            <Button onClick={clearFilters} variant="ghost" className="w-full sm:w-auto text-destructive hover:bg-destructive/10 hover:text-destructive">
+            <Button onClick={clearFilters} variant="ghost" className="w-full rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto">
               <FilterX className="mr-2 h-4 w-4" />
               Reset Filter Tanggal (Tampilkan Semua)
             </Button>
@@ -361,55 +367,55 @@ export default function ProfitReportPage() {
       
       <div ref={printRef}>
           <div className="print-content">
-            <CardDescription className="mb-4">
-                Menampilkan <span className="font-semibold text-primary">{reportData.numberOfSuccessfulTransactions}</span> transaksi SUKSES untuk periode <span className="font-semibold text-primary">{activeFilterLabel}</span>.
+            <CardDescription className="mb-4 text-[var(--ui-text-muted)] dark:text-zinc-400">
+                Menampilkan <span className="font-semibold text-[var(--ui-accent)]">{reportData.numberOfSuccessfulTransactions}</span> transaksi SUKSES untuk periode <span className="font-semibold text-[var(--ui-accent)]">{activeFilterLabel}</span>.
             </CardDescription>
 
             <div className="grid gap-6 md:grid-cols-3 summary-grid">
-                <Card className="shadow-md summary-card">
+                <Card className="summary-card rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-md dark:border-zinc-800 dark:bg-zinc-950">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Pendapatan (Jual)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-[var(--ui-text-muted)] dark:text-zinc-400">Total Pendapatan (Jual)</CardTitle>
                         <TrendingUp className="h-5 w-5 text-green-500" />
                     </CardHeader>
                     <CardContent>
                         <p className="text-2xl font-bold text-green-600">Rp {reportData.totalRevenue.toLocaleString()}</p>
                     </CardContent>
                 </Card>
-                <Card className="shadow-md summary-card">
+                <Card className="summary-card rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-md dark:border-zinc-800 dark:bg-zinc-950">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Modal (Beli)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-[var(--ui-text-muted)] dark:text-zinc-400">Total Modal (Beli)</CardTitle>
                         <TrendingDown className="h-5 w-5 text-red-500" />
                     </CardHeader>
                     <CardContent>
                         <p className="text-2xl font-bold text-red-600">Rp {reportData.totalCost.toLocaleString()}</p>
                     </CardContent>
                 </Card>
-                <Card className="shadow-md border-primary/50 summary-card">
+                <Card className="summary-card rounded-3xl border-[var(--ui-accent)]/30 bg-[var(--ui-card)] shadow-md dark:border-zinc-800 dark:bg-zinc-950">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-primary">Total Profit</CardTitle>
-                        <DollarSign className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-sm font-medium text-[var(--ui-accent)]">Total Profit</CardTitle>
+                        <DollarSign className="h-5 w-5 text-[var(--ui-accent)]" />
                     </CardHeader>
                     <CardContent>
-                        <p className={`text-2xl font-bold ${reportData.totalProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>Rp {reportData.totalProfit.toLocaleString()}</p>
+                        <p className={`text-2xl font-bold ${reportData.totalProfit >= 0 ? 'text-[var(--ui-accent)]' : 'text-destructive'}`}>Rp {reportData.totalProfit.toLocaleString()}</p>
                     </CardContent>
                 </Card>
             </div>
           
-            <Card className="mt-8 shadow-md">
-                <CardHeader><CardTitle className="text-lg">Detail Transaksi Sukses</CardTitle></CardHeader>
+            <Card className="mt-8 rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-md dark:border-zinc-800 dark:bg-zinc-950">
+                <CardHeader><CardTitle className="text-lg text-[var(--ui-text)] dark:text-zinc-100">Detail Transaksi Sukses</CardTitle></CardHeader>
                 <CardContent>
                 {filteredSuccessfulTransactions.length > 0 ? (
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                            <TableRow>
-                                <TableHead className="min-w-[150px]">Tanggal</TableHead>
-                                <TableHead>Produk</TableHead>
-                                <TableHead>Detail</TableHead>
-                                <TableHead>User</TableHead>
-                                <TableHead className="text-right">Modal</TableHead>
-                                <TableHead className="text-right">Jual</TableHead>
-                                <TableHead className="text-right">Profit</TableHead>
+                    <div className="overflow-x-auto rounded-2xl border border-[var(--ui-border)] dark:border-zinc-800">
+                        <Table className="text-[var(--ui-text)] dark:text-zinc-100">
+                            <TableHeader className="[&_tr]:border-[var(--ui-border)] dark:[&_tr]:border-zinc-800">
+                            <TableRow className="bg-[var(--ui-card-alt)] hover:bg-[var(--ui-card-alt)] dark:bg-zinc-900 dark:hover:bg-zinc-900">
+                                <TableHead className="min-w-[150px] text-[var(--ui-text-muted)] dark:text-zinc-400">Tanggal</TableHead>
+                                <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Produk</TableHead>
+                                <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Detail</TableHead>
+                                <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">User</TableHead>
+                                <TableHead className="text-right text-[var(--ui-text-muted)] dark:text-zinc-400">Modal</TableHead>
+                                <TableHead className="text-right text-[var(--ui-text-muted)] dark:text-zinc-400">Jual</TableHead>
+                                <TableHead className="text-right text-[var(--ui-text-muted)] dark:text-zinc-400">Profit</TableHead>
                             </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -417,13 +423,13 @@ export default function ProfitReportPage() {
                                 const effectiveSellingPrice = getEffectiveSellingPrice(tx.buyerSkuCode, tx.provider, tx.costPrice);
                                 const profit = effectiveSellingPrice - tx.costPrice;
                                 return (
-                                <TableRow key={tx.id}>
+                                <TableRow key={tx.id} className="border-[var(--ui-border)] hover:bg-[var(--ui-accent-bg)] dark:border-zinc-800 dark:hover:bg-zinc-900/70">
                                 <TableCell>{formatDateInTimezone(tx.timestamp)}</TableCell>
                                 <TableCell>{tx.productName}</TableCell>
-                                <TableCell>{tx.details}</TableCell>
+                                <TableCell className="text-[var(--ui-text-muted)] dark:text-zinc-400">{tx.details}</TableCell>
                                 <TableCell>{tx.transactedBy || 'N/A'}</TableCell>
                                 <TableCell className="text-right">Rp {tx.costPrice.toLocaleString()}</TableCell>
-                                <TableCell className="text-right">Rp {effectiveSellingPrice.toLocaleString()}</TableCell>
+                                <TableCell className="text-right font-medium text-[var(--ui-accent)]">Rp {effectiveSellingPrice.toLocaleString()}</TableCell>
                                 <TableCell className="text-right font-medium text-green-600">Rp {profit.toLocaleString()}</TableCell>
                                 </TableRow>
                                );
@@ -432,7 +438,7 @@ export default function ProfitReportPage() {
                         </Table>
                     </div>
                 ) : (
-                    <p className="text-center text-muted-foreground py-4">Tidak ada transaksi sukses pada periode ini.</p>
+                    <p className="py-4 text-center text-[var(--ui-text-muted)] dark:text-zinc-400">Tidak ada transaksi sukses pada periode ini.</p>
                 )}
                 </CardContent>
             </Card>
@@ -440,24 +446,24 @@ export default function ProfitReportPage() {
       </div>
 
       {!isLoading && filteredSuccessfulTransactions.length > 0 && totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6 pt-4 border-t no-print">
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+        <div className="mt-6 flex items-center justify-between border-t border-[var(--ui-border)] pt-4 no-print dark:border-zinc-800">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
             <ChevronLeft className="h-4 w-4 mr-1" /> Previous
           </Button>
-          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+          <span className="text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">Page {currentPage} of {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
             Next <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         </div>
       )}
 
-      <Card className="mt-8 shadow-md no-print">
+      <Card className="mt-8 rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-md no-print dark:border-zinc-800 dark:bg-zinc-950">
         <CardHeader>
-          <CardTitle className="text-lg">Catatan Laporan</CardTitle>
+          <CardTitle className="text-lg text-[var(--ui-text)] dark:text-zinc-100">Catatan Laporan</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-2">
+        <CardContent className="space-y-2 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
           <div>
-            - Laporan ini hanya mencakup transaksi dengan status <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-300">Sukses</Badge>.
+            - Laporan ini hanya mencakup transaksi dengan status <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300">Sukses</Badge>.
           </div>
           <div>
             - Profit dihitung sebagai (Harga Jual - Harga Modal) untuk setiap transaksi. Harga jual ditentukan oleh pengaturan harga custom Anda atau markup default jika tidak diatur.

@@ -1,337 +1,434 @@
-// src/app/(app)/layanan/digiflazz/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import ProductCard from "@/components/products/ProductCard";
-import { Loader2, AlertTriangle, Smartphone, Zap, Gamepad2, Settings, PiggyBank, DollarSign, Wifi, RefreshCw, ShoppingBag, Ticket } from "lucide-react";
-import type { LucideIcon } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  DollarSign,
+  Gamepad2,
+  PiggyBank,
+  RefreshCw,
+  Settings,
+  ShoppingBag,
+  Smartphone,
+  Ticket,
+  Wifi,
+  Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link';
-import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import ProductCard from "@/components/products/ProductCard";
+import DigiflazzDepositDialog from "@/components/dashboard/DepositDialog";
+import ProtectedRoute from "@/components/core/ProtectedRoute";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DIGIFLAZZ_CREDENTIALS_MISSING_ERROR,
+  type DigiflazzCategoryIconKey,
+  type DigiflazzCategorySummary,
+} from "@/lib/digiflazz-services-shared";
+import {
+  getDigiflazzServicesPageData,
+} from "@/lib/digiflazz-services-utils";
 
-import { fetchDigiflazzProducts, type DigiflazzProduct } from '@/ai/flows/fetch-digiflazz-products-flow';
-import { fetchDigiflazzBalance } from '@/ai/flows/fetch-digiflazz-balance-flow';
-import DigiflazzDepositDialog from '@/components/dashboard/DepositDialog';
-import { getAdminSettingsFromDB } from '@/lib/admin-settings-utils';
-import { Skeleton } from '@/components/ui/skeleton';
-import ProtectedRoute from '@/components/core/ProtectedRoute';
+const digiflazzIconMapping: Record<DigiflazzCategoryIconKey, LucideIcon> = {
+  smartphone: Smartphone,
+  zap: Zap,
+  gamepad2: Gamepad2,
+  wifi: Wifi,
+  "shopping-bag": ShoppingBag,
+  "dollar-sign": DollarSign,
+  ticket: Ticket,
+};
 
-export default function DigiflazzServicesPage() {
-  const { toast } = useToast();
-  const [digiflazzApiProducts, setDigiflazzApiProducts] = useState<DigiflazzProduct[]>([]);
-  const [isLoadingApiProducts, setIsLoadingApiProducts] = useState(true);
-  const [apiProductsError, setApiProductsError] = useState<string | null>(null);
-  
-  const [digiflazzBalance, setDigiflazzBalance] = useState<number | null>(null);
-  const [isLoadingDigiflazzBalance, setIsLoadingDigiflazzBalance] = useState(true);
-  const [digiflazzBalanceError, setDigiflazzBalanceError] = useState<string | null>(null);
-  const [isDigiflazzDepositDialogOpen, setIsDigiflazzDepositDialogOpen] = useState(false);
-  const digiflazzCredentialsMissingError = "Digiflazz username or API key is not configured in Admin Settings.";
-
-  const loadDigiflazzBalance = async () => {
-    setIsLoadingDigiflazzBalance(true);
-    setDigiflazzBalanceError(null);
-    try {
-      const balanceData = await fetchDigiflazzBalance();
-      setDigiflazzBalance(balanceData.balance);
-    } catch (error) {
-      console.error("Failed to load Digiflazz balance:", error);
-      let errorMessage = error instanceof Error ? error.message : "Failed to load Digiflazz balance.";
-      setDigiflazzBalanceError(errorMessage);
-    } finally {
-      setIsLoadingDigiflazzBalance(false);
-    }
-  };
-
-  const loadApiProducts = async (isManualRefresh = false) => {
-    if (isManualRefresh) {
-        setIsLoadingApiProducts(true);
-    }
-    setApiProductsError(null);
-    try {
-      const productsData = await fetchDigiflazzProducts({ forceRefresh: isManualRefresh });
-      setDigiflazzApiProducts(productsData);
-      if (isManualRefresh) {
-        toast({ title: "Product List Refreshed", description: "Successfully reloaded products from Digiflazz." });
-      }
-    } catch (error) {
-      console.error("Failed to load Digiflazz API products for categories:", error);
-      let errorMessage = "Failed to load product categories from API.";
-      if (error instanceof Error) {
-          errorMessage = error.message;
-           if (errorMessage === digiflazzCredentialsMissingError) {
-               errorMessage = "Digiflazz credentials not set. Cannot fetch products.";
-           }
-      }
-      setApiProductsError(errorMessage);
-      if (isManualRefresh || (!isLoadingApiProducts && !apiProductsError)) {
-        toast({ title: "Error Loading Categories", description: errorMessage, variant: "destructive" });
-      }
-    } finally {
-        if(isManualRefresh || isLoadingApiProducts) {
-            setIsLoadingApiProducts(false);
-        }
-    }
-  }
-
-  useEffect(() => {
-    async function checkConfigsAndLoadData() {
-      const adminSettings = await getAdminSettingsFromDB();
-      if (adminSettings.digiflazzUsername && adminSettings.digiflazzApiKey) {
-        loadDigiflazzBalance();
-        loadApiProducts();
-      } else {
-        setIsLoadingDigiflazzBalance(false);
-        setDigiflazzBalanceError(digiflazzCredentialsMissingError);
-        setIsLoadingApiProducts(false);
-        setApiProductsError(digiflazzCredentialsMissingError);
-        toast({ title: "Digiflazz Config Needed", description: digiflazzCredentialsMissingError, variant: "destructive", duration: 7000 });
-      }
-    }
-    checkConfigsAndLoadData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const { prioritizedCategories, otherCategories } = useMemo(() => {
-    if (isLoadingApiProducts || apiProductsError || digiflazzApiProducts.length === 0) {
-      return { prioritizedCategories: [], otherCategories: [] };
-    }
-
-    const categoriesMap = new Map<string, { title: string; description: string; icon: LucideIcon; href: string; productCount: number; isPriority: boolean; products: DigiflazzProduct[] }>();
-
-    digiflazzApiProducts.forEach(product => {
-      let categoryKey: string | null = null;
-      let displayTitle = product.category;
-      let hrefLink = `/order/digital-services?category=${encodeURIComponent(product.category)}`;
-      let icon = ShoppingBag;
-      let description = `Layanan ${displayTitle} dari Digiflazz.`;
-      let isPriority = false;
-
-      const categoryUpper = product.category.toUpperCase();
-      const brandUpper = product.brand.toUpperCase();
-
-      if (brandUpper.includes("PLN") || categoryUpper.includes("TOKEN")) {
-        categoryKey = "PLN";
-        displayTitle = "PLN";
-        hrefLink = "/order/token-listrik";
-        icon = Zap;
-        isPriority = true;
-        description = "Beli token listrik PLN prabayar dengan mudah.";
-      } else if (categoryUpper.includes("PULSA")) {
-        categoryKey = "Pulsa";
-        displayTitle = "Pulsa";
-        hrefLink = "/order/pulsa";
-        icon = Smartphone;
-        isPriority = true;
-        description = "Beli pulsa untuk semua operator dengan harga terbaik.";
-      } else if (categoryUpper.includes("PAKET DATA") || categoryUpper.includes("DATA")) {
-        categoryKey = "Paket Data";
-        displayTitle = "Paket Data";
-        hrefLink = `/order/digital-services?category=Paket%20Data`;
-        icon = Wifi;
-        isPriority = true;
-        description = "Beli paket data internet untuk semua operator.";
-      } else if (categoryUpper.includes("GAME") || brandUpper.includes("GAME") || categoryUpper.includes("TOPUP") || brandUpper.includes("VOUCHER GAME")) {
-        categoryKey = "Top Up Games";
-        displayTitle = "Top Up Games";
-        hrefLink = `/order/digital-services?category=Games`;
-        icon = Gamepad2;
-        isPriority = true;
-        description = "Top up diamond, UC, dan voucher game populer.";
-      } else {
-        categoryKey = product.category;
-        const defaultIconMatch = Object.keys(productIconsMapping).find(key => displayTitle.toUpperCase().includes(key.toUpperCase()));
-        icon = defaultIconMatch ? productIconsMapping[defaultIconMatch] : ShoppingBag;
-      }
-
-      if (!categoriesMap.has(categoryKey)) {
-        categoriesMap.set(categoryKey, {
-          title: displayTitle,
-          description: description,
-          icon: icon,
-          href: hrefLink,
-          productCount: 0,
-          isPriority: isPriority,
-          products: [],
-        });
-      }
-      categoriesMap.get(categoryKey)!.products.push(product);
-    });
-
-    // Now, calculate the active product count for each category
-    const allCats = Array.from(categoriesMap.values()).map(category => ({
-      ...category,
-      productCount: category.products.filter(p => p.buyer_product_status && p.seller_product_status).length,
-    }));
-
-    return {
-      prioritizedCategories: allCats.filter(c => c.isPriority),
-      otherCategories: allCats.filter(c => !c.isPriority).sort((a, b) => a.title.localeCompare(b.title)),
-    };
-  }, [digiflazzApiProducts, isLoadingApiProducts, apiProductsError]);
-
-  const CategorySkeleton = () => (
-    <div className="relative p-6 border rounded-xl shadow-md bg-card h-[180px] flex flex-col items-center justify-center text-center space-y-3">
-        <Skeleton className="absolute top-2 right-2 h-6 w-12 rounded-full" />
-        <Skeleton className="h-12 w-12 rounded-lg" />
-        <div className="space-y-2">
-            <Skeleton className="h-5 w-24 mx-auto" />
-            <Skeleton className="h-3 w-40 mx-auto" />
-        </div>
-    </div>
-  );
-  
-  const allCategories = [...prioritizedCategories, ...otherCategories];
-
+function CategorySkeleton() {
   return (
-    <ProtectedRoute requiredPermission='layanan_digiflazz'>
-    <div className="space-y-8">
-      <section>
-        <h1 className="text-2xl sm:text-3xl font-bold font-headline">Layanan Produk Digiflazz</h1>
-        <p className="text-md text-muted-foreground">Pilih kategori produk yang Anda butuhkan.</p>
-      </section>
-
-      <Card className="shadow-lg border-primary/30">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-lg font-semibold font-headline">Saldo Digiflazz</CardTitle>
-              <DollarSign className="h-6 w-6 text-primary" />
-          </CardHeader>
-          <CardContent>
-              {isLoadingDigiflazzBalance ? (
-                  <Skeleton className="h-8 w-40" />
-              ) : digiflazzBalanceError ? (
-                  <div className="text-destructive space-y-1">
-                      <div className="flex items-center space-x-2">
-                          <AlertTriangle className="h-5 w-5" /> <span>Error: {digiflazzBalanceError}</span>
-                      </div>
-                  </div>
-              ) : digiflazzBalance !== null ? (
-                  <p className="text-2xl font-bold text-primary"> Rp {digiflazzBalance.toLocaleString()} </p>
-              ) : (
-                  <p className="text-muted-foreground">Data saldo tidak tersedia.</p>
-              )}
-              <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                <Button variant="outline" className="border-primary text-primary hover:bg-primary/10" onClick={() => setIsDigiflazzDepositDialogOpen(true)} disabled={isLoadingDigiflazzBalance || !!digiflazzBalanceError}>
-                    <PiggyBank className="mr-2 h-4 w-4" /> Request Deposit
-                </Button>
-                <Button onClick={() => loadApiProducts(true)} disabled={isLoadingApiProducts || !!apiProductsError} variant="secondary">
-                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingApiProducts ? 'animate-spin' : ''}`} />
-                  Refresh Kategori
-                </Button>
-              </div>
-          </CardContent>
-      </Card>
-
-
-      {apiProductsError && !isLoadingApiProducts && (
-        <Card className="text-center py-10 shadow border-destructive bg-destructive/10">
-          <CardHeader>
-              <CardTitle className="text-destructive flex items-center justify-center gap-2">
-                  <AlertTriangle className="h-6 w-6" /> Error Loading Products
-              </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-destructive/90">{apiProductsError}</p>
-            {apiProductsError.includes("Digiflazz credentials not set") && (
-                <Button asChild variant="destructive" size="sm" className="mt-3">
-                  <Link href="/admin-settings"> <Settings className="mr-2 h-4 w-4" /> Go to Admin Settings </Link>
-                </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {isLoadingApiProducts && (
-          <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                      <Skeleton className="h-5 w-32" />
-                  </h2>
-                   <Skeleton className="h-4 w-20" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                 {[...Array(4)].map((_, i) => <CategorySkeleton key={i} />)}
-              </div>
-          </div>
-      )}
-
-      {!isLoadingApiProducts && !apiProductsError && allCategories.length > 0 && (
-          <>
-            {prioritizedCategories.length > 0 && (
-                <section>
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            Kategori Utama
-                            <Separator className="w-16 h-0.5 bg-primary/50" />
-                        </h2>
-                        <span className="text-sm text-muted-foreground">{prioritizedCategories.length} kategori</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                        {prioritizedCategories.map((category) => (
-                            <ProductCard
-                                key={category.title}
-                                title={category.title}
-                                description={category.description}
-                                icon={category.icon}
-                                href={category.href}
-                                productCount={category.productCount}
-                            />
-                        ))}
-                    </div>
-                </section>
-            )}
-
-             {otherCategories.length > 0 && (
-                <section>
-                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            Kategori Lainnya
-                             <Separator className="w-16 h-0.5 bg-primary/50" />
-                        </h2>
-                         <span className="text-sm text-muted-foreground">{otherCategories.length} kategori</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                        {otherCategories.map((category) => (
-                            <ProductCard
-                                key={category.title}
-                                title={category.title}
-                                description={category.description}
-                                icon={category.icon}
-                                href={category.href}
-                                productCount={category.productCount}
-                            />
-                        ))}
-                    </div>
-                </section>
-            )}
-          </>
-      )}
-
-      {!isLoadingApiProducts && !apiProductsError && allCategories.length === 0 && (
-           <p className="text-center text-muted-foreground py-10">No categories could be derived from active Digiflazz products.</p>
-      )}
-
-      <DigiflazzDepositDialog open={isDigiflazzDepositDialogOpen} onOpenChange={setIsDigiflazzDepositDialogOpen} onDepositSuccess={loadDigiflazzBalance} />
+    <div className="relative flex h-[180px] flex-col items-center justify-center space-y-3 rounded-3xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <Skeleton className="absolute right-2 top-2 h-6 w-12 rounded-full" />
+      <Skeleton className="h-14 w-14 rounded-xl" />
+      <div className="w-full space-y-2">
+        <Skeleton className="mx-auto h-5 w-24" />
+        <Skeleton className="mx-auto h-3 w-3/4" />
+      </div>
     </div>
-    </ProtectedRoute>
   );
 }
 
-const productIconsMapping: { [key: string]: LucideIcon } = {
-  Pulsa: Smartphone,
-  "Token Listrik": Zap,
-  "Game Topup": Gamepad2, 
-  "Digital Service": ShoppingBag, 
-  "FREE FIRE": Gamepad2,
-  "MOBILE LEGENDS": Gamepad2,
-  "GENSHIN IMPACT": Gamepad2,
-  "HONKAI STAR RAIL": Gamepad2,
-  "PLN": Zap,
-  "E-Money": DollarSign, 
-  "TV": Ticket,
-  "PAKET DATA": Wifi,
-  "VOUCHER": Ticket,
-  "Default": ShoppingBag, 
-};
+export default function DigiflazzServicesPage() {
+  const { toast } = useToast();
+  const [prioritizedCategories, setPrioritizedCategories] = useState<
+    DigiflazzCategorySummary[]
+  >([]);
+  const [otherCategories, setOtherCategories] = useState<
+    DigiflazzCategorySummary[]
+  >([]);
+  const [totalCategories, setTotalCategories] = useState(0);
+  const [totalActiveProducts, setTotalActiveProducts] = useState(0);
+  const [credentialsConfigured, setCredentialsConfigured] = useState(true);
+  const [digiflazzBalance, setDigiflazzBalance] = useState<number | null>(null);
+  const [isLoadingApiProducts, setIsLoadingApiProducts] = useState(true);
+  const [isLoadingDigiflazzBalance, setIsLoadingDigiflazzBalance] =
+    useState(true);
+  const [apiProductsError, setApiProductsError] = useState<string | null>(null);
+  const [apiProductsWarning, setApiProductsWarning] = useState<string | null>(
+    null
+  );
+  const [digiflazzBalanceError, setDigiflazzBalanceError] = useState<
+    string | null
+  >(null);
+  const [isDigiflazzDepositDialogOpen, setIsDigiflazzDepositDialogOpen] =
+    useState(false);
+  const requestIdRef = useRef(0);
+
+  const loadDigiflazzServices = useCallback(
+    async ({
+      forceRefreshProducts = false,
+      preserveCategories = false,
+      notifyCredentialIssue = false,
+    }: {
+      forceRefreshProducts?: boolean;
+      preserveCategories?: boolean;
+      notifyCredentialIssue?: boolean;
+    } = {}) => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+
+      setIsLoadingDigiflazzBalance(true);
+      setDigiflazzBalanceError(null);
+
+      if (!preserveCategories) {
+        setIsLoadingApiProducts(true);
+        setApiProductsError(null);
+        setApiProductsWarning(null);
+      }
+
+      try {
+        const summary = await getDigiflazzServicesPageData({
+          forceRefreshProducts,
+        });
+
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setCredentialsConfigured(summary.credentialsConfigured);
+        setDigiflazzBalance(summary.balance);
+        setDigiflazzBalanceError(summary.balanceError);
+        setApiProductsError(summary.apiProductsError);
+        setApiProductsWarning(summary.apiProductsWarning);
+        setPrioritizedCategories(summary.prioritizedCategories);
+        setOtherCategories(summary.otherCategories);
+        setTotalCategories(summary.totalCategories);
+        setTotalActiveProducts(summary.totalActiveProducts);
+
+        if (!summary.credentialsConfigured && notifyCredentialIssue) {
+          toast({
+            title: "Digiflazz Config Needed",
+            description: DIGIFLAZZ_CREDENTIALS_MISSING_ERROR,
+            variant: "destructive",
+            duration: 7000,
+          });
+        }
+
+        if (forceRefreshProducts) {
+          if (summary.apiProductsWarning) {
+            toast({
+              title: "Refresh Used Cached Categories",
+              description: summary.apiProductsWarning,
+              variant: "destructive",
+            });
+          } else if (summary.apiProductsError) {
+            toast({
+              title: "Error Loading Categories",
+              description: summary.apiProductsError,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Product List Refreshed",
+              description:
+                "Successfully reloaded Digiflazz category summary from the server.",
+            });
+          }
+        }
+      } catch (error) {
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to load Digiflazz services.";
+
+        console.error("Failed to load Digiflazz services:", error);
+
+        if (!preserveCategories) {
+          setApiProductsError(errorMessage);
+        }
+        setDigiflazzBalanceError(errorMessage);
+
+        toast({
+          title: "Error Loading Digiflazz Services",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setIsLoadingDigiflazzBalance(false);
+          if (!preserveCategories) {
+            setIsLoadingApiProducts(false);
+          }
+        }
+      }
+    },
+    [toast]
+  );
+
+  useEffect(() => {
+    void loadDigiflazzServices({ notifyCredentialIssue: true });
+  }, [loadDigiflazzServices]);
+
+  const allCategories = [...prioritizedCategories, ...otherCategories];
+
+  return (
+    <ProtectedRoute requiredPermission="layanan_digiflazz">
+      <div className="mx-auto max-w-7xl space-y-8 pb-10">
+        <section>
+          <div className="mb-6 flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--ui-accent-gradient-from)] to-[var(--ui-accent-gradient-to)] text-white shadow-lg">
+              <Smartphone className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-serif font-bold tracking-tight text-[var(--ui-text)] dark:text-zinc-100 sm:text-3xl">
+                Layanan Produk Digiflazz
+              </h1>
+              <p className="mt-1 text-md text-[var(--ui-text-muted)] dark:text-zinc-400">
+                Kategori sekarang diringkas di server agar browser tidak perlu
+                menarik seluruh katalog Digiflazz.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.9fr)]">
+          <Card className="relative overflow-hidden rounded-3xl border-[var(--ui-border)] bg-[var(--ui-surface)] shadow-lg dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-lg">
+            <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-[var(--ui-top-bar-from)] via-[var(--ui-top-bar-via)] to-[var(--ui-accent-gradient-to)] opacity-80" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 pb-2 pt-6 sm:px-8">
+              <CardTitle className="text-xl font-serif text-[var(--ui-text)] dark:text-zinc-100">
+                Saldo Digiflazz
+              </CardTitle>
+              <div className="rounded-xl bg-[var(--ui-accent)]/10 p-2">
+                <DollarSign className="h-6 w-6 text-[var(--ui-accent)]" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-6 pb-8 pt-2 sm:px-8">
+              {isLoadingDigiflazzBalance ? (
+                <Skeleton className="mb-2 h-10 w-48" />
+              ) : digiflazzBalanceError ? (
+                <div className="mb-2 rounded-xl border border-red-200 bg-red-50 p-3 text-red-500 dark:border-red-900/50 dark:bg-red-900/10">
+                  <div className="flex items-center space-x-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    <span className="text-sm font-medium">
+                      Error: {digiflazzBalanceError}
+                    </span>
+                  </div>
+                </div>
+              ) : digiflazzBalance !== null ? (
+                <p className="mb-2 text-3xl font-bold tracking-tight text-[var(--ui-accent)]">
+                  Rp {digiflazzBalance.toLocaleString("id-ID")}
+                </p>
+              ) : (
+                <p className="mb-2 text-[var(--ui-text-secondary)] dark:text-zinc-500">
+                  Data saldo tidak tersedia.
+                </p>
+              )}
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <Button
+                  variant="outline"
+                  className="rounded-xl border-[var(--ui-accent-light)]/30 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/10 hover:text-[var(--ui-accent-hover)]"
+                  onClick={() => setIsDigiflazzDepositDialogOpen(true)}
+                  disabled={
+                    isLoadingDigiflazzBalance ||
+                    !credentialsConfigured ||
+                    digiflazzBalanceError === DIGIFLAZZ_CREDENTIALS_MISSING_ERROR
+                  }
+                >
+                  <PiggyBank className="mr-2 h-4 w-4" />
+                  Request Deposit
+                </Button>
+                <Button
+                  onClick={() =>
+                    void loadDigiflazzServices({ forceRefreshProducts: true })
+                  }
+                  disabled={isLoadingApiProducts || !credentialsConfigured}
+                  variant="secondary"
+                  className="rounded-xl bg-[var(--ui-card-alt)] text-[var(--ui-accent)] hover:bg-[var(--ui-highlight-bg)] dark:bg-zinc-900 dark:text-[var(--ui-accent-light)] dark:hover:bg-zinc-800"
+                >
+                  <RefreshCw
+                    className={`mr-2 h-4 w-4 ${
+                      isLoadingApiProducts ? "animate-spin" : ""
+                    }`}
+                  />
+                  Refresh Kategori
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <CardContent className="grid h-full gap-4 p-6 sm:grid-cols-2 lg:grid-cols-1">
+              <div className="rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--ui-text-secondary)] dark:text-zinc-500">
+                  Active Products
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-[var(--ui-text)] dark:text-zinc-100">
+                  {totalActiveProducts.toLocaleString("id-ID")}
+                </p>
+                <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
+                  Hanya produk aktif yang diringkas ke kategori.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--ui-text-secondary)] dark:text-zinc-500">
+                  Categories
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-[var(--ui-text)] dark:text-zinc-100">
+                  {totalCategories.toLocaleString("id-ID")}
+                </p>
+                <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
+                  Kategori prioritas dan kategori lainnya dari server summary.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {apiProductsError && !isLoadingApiProducts && (
+          <Card className="border-destructive bg-destructive/10 py-10 text-center shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-center gap-2 text-destructive">
+                <AlertTriangle className="h-6 w-6" />
+                Error Loading Products
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-destructive/90">{apiProductsError}</p>
+              {apiProductsError.includes("Digiflazz username or API key") && (
+                <Button asChild variant="destructive" size="sm" className="mt-3">
+                  <Link href="/admin-settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Go to Admin Settings
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {apiProductsWarning && !isLoadingApiProducts && (
+          <Card className="rounded-3xl border-amber-500/30 bg-amber-500/10 shadow-sm">
+            <CardContent className="flex flex-col gap-2 p-5 text-sm text-amber-800 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p>{apiProductsWarning}</p>
+              </div>
+              <span className="text-xs font-medium uppercase tracking-[0.18em]">
+                Cached Summary
+              </span>
+            </CardContent>
+          </Card>
+        )}
+
+        {isLoadingApiProducts && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <Skeleton className="h-5 w-32" />
+              </h2>
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <CategorySkeleton key={index} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!isLoadingApiProducts && !apiProductsError && allCategories.length > 0 && (
+          <>
+            {prioritizedCategories.length > 0 && (
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="flex items-center gap-3 text-xl font-serif font-semibold text-[var(--ui-text)] dark:text-zinc-100">
+                    Kategori Utama
+                    <Separator className="min-w-[50px] flex-1 bg-[#EFEBE0] dark:bg-zinc-800" />
+                  </h2>
+                  <span className="rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1 text-sm font-medium text-[var(--ui-text-secondary)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
+                    {prioritizedCategories.length} kategori
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {prioritizedCategories.map((category) => (
+                    <ProductCard
+                      key={category.key}
+                      title={category.title}
+                      description={category.description}
+                      icon={digiflazzIconMapping[category.iconKey]}
+                      href={category.href}
+                      productCount={category.productCount}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {otherCategories.length > 0 && (
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="flex items-center gap-3 text-xl font-serif font-semibold text-[var(--ui-text)] dark:text-zinc-100">
+                    Kategori Lainnya
+                    <Separator className="min-w-[50px] flex-1 bg-[#EFEBE0] dark:bg-zinc-800" />
+                  </h2>
+                  <span className="rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1 text-sm font-medium text-[var(--ui-text-secondary)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
+                    {otherCategories.length} kategori
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {otherCategories.map((category) => (
+                    <ProductCard
+                      key={category.key}
+                      title={category.title}
+                      description={category.description}
+                      icon={digiflazzIconMapping[category.iconKey]}
+                      href={category.href}
+                      productCount={category.productCount}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {!isLoadingApiProducts && !apiProductsError && allCategories.length === 0 && (
+          <p className="py-10 text-center text-muted-foreground">
+            No categories could be derived from active Digiflazz products.
+          </p>
+        )}
+
+        <DigiflazzDepositDialog
+          open={isDigiflazzDepositDialogOpen}
+          onOpenChange={setIsDigiflazzDepositDialogOpen}
+          onDepositSuccess={() =>
+            void loadDigiflazzServices({ preserveCategories: true })
+          }
+        />
+      </div>
+    </ProtectedRoute>
+  );
+}

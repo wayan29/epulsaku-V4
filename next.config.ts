@@ -1,11 +1,5 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-});
-
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
@@ -29,13 +23,12 @@ const nextConfig = {
       },
     ],
   },
-  webpack: (config, { isServer }) => {
-    // Suppress warnings from dependencies that use dynamic requires
-    // This is common for packages that have optional dependencies.
+  webpack: (config: any) => {
     config.ignoreWarnings = [
-        ...(config.ignoreWarnings || []),
-        /Module not found: Can't resolve '@opentelemetry\/exporter-jaeger'/,
-        /require\.extensions is not supported by webpack/,
+      ...(config.ignoreWarnings || []),
+      /Critical dependency: the request of a dependency is an expression/,
+      /Module not found: Can't resolve '@opentelemetry\/exporter-jaeger'/,
+      /require\.extensions is not supported by webpack/,
     ];
     return config;
   },
@@ -67,4 +60,4 @@ const nextConfig = {
   },
 };
 
-module.exports = withPWA(nextConfig);
+module.exports = nextConfig;

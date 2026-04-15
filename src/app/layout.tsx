@@ -1,8 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from '@/components/core/providers';
-import { AuthProvider } from '@/contexts/AuthContext'; // Import AuthProvider
+import { AuthProvider } from '@/contexts/AuthContext';
+import { getResolvedUiTheme } from '@/lib/ui-theme-actions';
 
 export const metadata: Metadata = {
   title: 'ePulsaku - Digital Product Transactions',
@@ -10,11 +11,21 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 };
 
-export default function RootLayout({
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const resolvedUiTheme = await getResolvedUiTheme();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -24,8 +35,8 @@ export default function RootLayout({
         <meta name="theme-color" content="#4338ca" />
       </head>
       <body className="font-body antialiased">
-        <Providers>
-          <AuthProvider> {/* Wrap the entire app in AuthProvider */}
+        <Providers resolvedUiTheme={resolvedUiTheme}>
+          <AuthProvider>
             {children}
             <Toaster />
           </AuthProvider>

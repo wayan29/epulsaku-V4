@@ -76,18 +76,18 @@ export default function OperatorCheckerPage() {
 
   return (
     <ProtectedRoute requiredPermission="cek_operator_seluler">
-      <CardContent>
+      <CardContent className="px-6 pb-6 sm:px-8 sm:pb-8">
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="phoneNumber" className="flex items-center">
-              <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="phoneNumber" className="flex items-center text-[var(--ui-text)] dark:text-zinc-100">
+              <Phone className="mr-2 h-4 w-4 text-[var(--ui-text-secondary)] dark:text-zinc-500" />
               Enter Phone Number
             </Label>
-            <Input id="phoneNumber" placeholder="e.g., 081234567890" {...register("phoneNumber")} />
+            <Input id="phoneNumber" placeholder="e.g., 081234567890" {...register("phoneNumber")} className="border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
           </div>
 
           {detectedOperator && (
-            <div className={`mt-4 p-4 rounded-md text-sm font-semibold flex items-center gap-2 ${detectedOperator.includes("not found") ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+            <div className={`mt-4 flex items-center gap-2 rounded-2xl border p-4 text-sm font-semibold ${detectedOperator.includes("not found") ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>
               <ShieldCheck className="h-5 w-5" />
               Operator: {detectedOperator}
             </div>

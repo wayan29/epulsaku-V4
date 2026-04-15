@@ -44,7 +44,7 @@ const purchaseDigiflazzProductFlow = ai.defineFlow(
     inputSchema: PurchaseDigiflazzProductInputSchema,
     outputSchema: PurchaseDigiflazzProductOutputSchema,
   },
-  async (input) => {
+  async (input): Promise<PurchaseDigiflazzProductOutput> => {
     const adminSettings = await getAdminSettingsFromDB();
     const username = adminSettings.digiflazzUsername;
     const apiKey = adminSettings.digiflazzApiKey;
@@ -100,9 +100,14 @@ const purchaseDigiflazzProductFlow = ai.defineFlow(
       }
       
       if (digiData) {
+        const normalizedStatus: PurchaseDigiflazzProductOutput['status'] =
+          digiData.status === 'Sukses' || digiData.status === 'Pending' || digiData.status === 'Gagal'
+            ? digiData.status
+            : 'Gagal';
+
         return {
           isSuccess: true, 
-          status: digiData.status, 
+          status: normalizedStatus, 
           message: digiData.message,
           sn: digiData.sn || null,
           price: digiData.price || null,

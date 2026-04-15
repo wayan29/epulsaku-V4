@@ -3,8 +3,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent double-tap zoom and pinch-zoom on mobile */
+html {
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+}
+
 body {
   font-family: 'Inter', Arial, Helvetica, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior: none;
+  overflow-x: hidden;
 }
 
 @layer base {
@@ -71,6 +82,287 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ═══════════════════════════════════════
+   UI Theme System — data-ui-theme tokens
+   ═══════════════════════════════════════ */
+
+/* ── Ember (default) ── */
+:root,
+[data-ui-theme="ember"] {
+  --ui-surface: #FDFBF7;
+  --ui-card: #FFFFFF;
+  --ui-card-alt: #FFF8F0;
+  --ui-border: #EFEBE0;
+  --ui-text: #36454F;
+  --ui-text-muted: #6D6B5F;
+  --ui-text-secondary: #8C8A79;
+  --ui-accent: #D35400;
+  --ui-accent-hover: #A04000;
+  --ui-accent-light: #E67E22;
+  --ui-accent-bg: rgba(211, 84, 0, 0.08);
+  --ui-accent-bg-hover: rgba(211, 84, 0, 0.15);
+  --ui-accent-gradient-from: #E67E22;
+  --ui-accent-gradient-to: #D35400;
+  --ui-highlight-bg: #FFE8D6;
+  --ui-highlight-border: rgba(230, 126, 34, 0.3);
+  --ui-icon-bg: rgba(211, 84, 0, 0.10);
+  --ui-badge-bg: #D35400;
+  --ui-badge-text: #FFFFFF;
+  --ui-input-border: #E8E6D9;
+  --ui-input-bg: #FFFFFF;
+  --ui-top-bar-from: #F5B041;
+  --ui-top-bar-via: #E67E22;
+  --ui-top-bar-to: #D35400;
+}
+
+/* ── Horizon ── */
+[data-ui-theme="horizon"] {
+  --ui-surface: #F8FAFC;
+  --ui-card: #FFFFFF;
+  --ui-card-alt: #F0F4FA;
+  --ui-border: #E2E8F0;
+  --ui-text: #1E293B;
+  --ui-text-muted: #64748B;
+  --ui-text-secondary: #94A3B8;
+  --ui-accent: #3B82F6;
+  --ui-accent-hover: #2563EB;
+  --ui-accent-light: #60A5FA;
+  --ui-accent-bg: rgba(59, 130, 246, 0.08);
+  --ui-accent-bg-hover: rgba(59, 130, 246, 0.15);
+  --ui-accent-gradient-from: #60A5FA;
+  --ui-accent-gradient-to: #3B82F6;
+  --ui-highlight-bg: #DBEAFE;
+  --ui-highlight-border: rgba(59, 130, 246, 0.3);
+  --ui-icon-bg: rgba(59, 130, 246, 0.10);
+  --ui-badge-bg: #3B82F6;
+  --ui-badge-text: #FFFFFF;
+  --ui-input-border: #CBD5E1;
+  --ui-input-bg: #FFFFFF;
+  --ui-top-bar-from: #93C5FD;
+  --ui-top-bar-via: #60A5FA;
+  --ui-top-bar-to: #3B82F6;
+}
+
+/* ── Neo Brutal ── */
+[data-ui-theme="neo-brutal"] {
+  --ui-surface: #F1F5F9;
+  --ui-card: #FFFFFF;
+  --ui-card-alt: #E8EDF3;
+  --ui-border: #CBD5E1;
+  --ui-text: #0F172A;
+  --ui-text-muted: #475569;
+  --ui-text-secondary: #64748B;
+  --ui-accent: #1E3A5F;
+  --ui-accent-hover: #152B47;
+  --ui-accent-light: #2563EB;
+  --ui-accent-bg: rgba(30, 58, 95, 0.08);
+  --ui-accent-bg-hover: rgba(30, 58, 95, 0.15);
+  --ui-accent-gradient-from: #2563EB;
+  --ui-accent-gradient-to: #1E3A5F;
+  --ui-highlight-bg: #DBEAFE;
+  --ui-highlight-border: rgba(30, 58, 95, 0.3);
+  --ui-icon-bg: rgba(30, 58, 95, 0.10);
+  --ui-badge-bg: #1E3A5F;
+  --ui-badge-text: #FFFFFF;
+  --ui-input-border: #94A3B8;
+  --ui-input-bg: #FFFFFF;
+  --ui-top-bar-from: #2563EB;
+  --ui-top-bar-via: #1E3A5F;
+  --ui-top-bar-to: #0F172A;
+}
+
+/* ── Midnight ── */
+[data-ui-theme="midnight"] {
+  --ui-surface: #0F172A;
+  --ui-card: #1E293B;
+  --ui-card-alt: #1A2435;
+  --ui-border: #334155;
+  --ui-text: #F1F5F9;
+  --ui-text-muted: #94A3B8;
+  --ui-text-secondary: #64748B;
+  --ui-accent: #38BDF8;
+  --ui-accent-hover: #0EA5E9;
+  --ui-accent-light: #10B981;
+  --ui-accent-bg: rgba(56, 189, 248, 0.10);
+  --ui-accent-bg-hover: rgba(56, 189, 248, 0.20);
+  --ui-accent-gradient-from: #38BDF8;
+  --ui-accent-gradient-to: #10B981;
+  --ui-highlight-bg: rgba(16, 185, 129, 0.15);
+  --ui-highlight-border: rgba(16, 185, 129, 0.3);
+  --ui-icon-bg: rgba(56, 189, 248, 0.12);
+  --ui-badge-bg: #38BDF8;
+  --ui-badge-text: #0F172A;
+  --ui-input-border: #475569;
+  --ui-input-bg: #1E293B;
+  --ui-top-bar-from: #38BDF8;
+  --ui-top-bar-via: #10B981;
+  --ui-top-bar-to: #0F172A;
+}
+
+/* ── Forest ── */
+[data-ui-theme="forest"] {
+  --ui-surface: #F6FBF8;
+  --ui-card: #FFFFFF;
+  --ui-card-alt: #EEF7F0;
+  --ui-border: #D7E8DB;
+  --ui-text: #1F2937;
+  --ui-text-muted: #6B7280;
+  --ui-text-secondary: #8B948F;
+  --ui-accent: #15803D;
+  --ui-accent-hover: #166534;
+  --ui-accent-light: #22C55E;
+  --ui-accent-bg: rgba(21, 128, 61, 0.08);
+  --ui-accent-bg-hover: rgba(21, 128, 61, 0.15);
+  --ui-accent-gradient-from: #22C55E;
+  --ui-accent-gradient-to: #15803D;
+  --ui-highlight-bg: #DCFCE7;
+  --ui-highlight-border: rgba(34, 197, 94, 0.25);
+  --ui-icon-bg: rgba(21, 128, 61, 0.10);
+  --ui-badge-bg: #15803D;
+  --ui-badge-text: #FFFFFF;
+  --ui-input-border: #C7DCCB;
+  --ui-input-bg: #FFFFFF;
+  --ui-top-bar-from: #4ADE80;
+  --ui-top-bar-via: #22C55E;
+  --ui-top-bar-to: #15803D;
+}
+
+/* ── Royal Plum ── */
+[data-ui-theme="royal-plum"] {
+  --ui-surface: #FCFAFF;
+  --ui-card: #FFFFFF;
+  --ui-card-alt: #F5F0FF;
+  --ui-border: #E8DDFE;
+  --ui-text: #2E1065;
+  --ui-text-muted: #6B7280;
+  --ui-text-secondary: #8B5CF6;
+  --ui-accent: #7C3AED;
+  --ui-accent-hover: #6D28D9;
+  --ui-accent-light: #A78BFA;
+  --ui-accent-bg: rgba(124, 58, 237, 0.08);
+  --ui-accent-bg-hover: rgba(124, 58, 237, 0.15);
+  --ui-accent-gradient-from: #A78BFA;
+  --ui-accent-gradient-to: #7C3AED;
+  --ui-highlight-bg: #EDE9FE;
+  --ui-highlight-border: rgba(124, 58, 237, 0.25);
+  --ui-icon-bg: rgba(124, 58, 237, 0.10);
+  --ui-badge-bg: #7C3AED;
+  --ui-badge-text: #FFFFFF;
+  --ui-input-border: #DDD6FE;
+  --ui-input-bg: #FFFFFF;
+  --ui-top-bar-from: #C4B5FD;
+  --ui-top-bar-via: #A78BFA;
+  --ui-top-bar-to: #7C3AED;
+}
+
+/* ── Graphite ── */
+[data-ui-theme="graphite"] {
+  --ui-surface: #F4F4F5;
+  --ui-card: #FFFFFF;
+  --ui-card-alt: #ECECEE;
+  --ui-border: #D4D4D8;
+  --ui-text: #18181B;
+  --ui-text-muted: #71717A;
+  --ui-text-secondary: #A1A1AA;
+  --ui-accent: #27272A;
+  --ui-accent-hover: #18181B;
+  --ui-accent-light: #52525B;
+  --ui-accent-bg: rgba(39, 39, 42, 0.08);
+  --ui-accent-bg-hover: rgba(39, 39, 42, 0.15);
+  --ui-accent-gradient-from: #52525B;
+  --ui-accent-gradient-to: #27272A;
+  --ui-highlight-bg: #E4E4E7;
+  --ui-highlight-border: rgba(63, 63, 70, 0.22);
+  --ui-icon-bg: rgba(39, 39, 42, 0.10);
+  --ui-badge-bg: #27272A;
+  --ui-badge-text: #FFFFFF;
+  --ui-input-border: #D4D4D8;
+  --ui-input-bg: #FFFFFF;
+  --ui-top-bar-from: #71717A;
+  --ui-top-bar-via: #52525B;
+  --ui-top-bar-to: #27272A;
+}
+
+/* Dark mode overrides for light themes */
+.dark[data-ui-theme="ember"],
+.dark [data-ui-theme="ember"],
+[data-ui-theme="ember"].dark {
+  --ui-surface: #18120C;
+  --ui-card: #1C1410;
+  --ui-card-alt: #211812;
+  --ui-border: #2E2218;
+  --ui-input-bg: #1C1410;
+  --ui-input-border: #2E2218;
+  --ui-text: #F5F0EB;
+  --ui-text-muted: #A89A8C;
+  --ui-text-secondary: #7A6E62;
+}
+.dark[data-ui-theme="horizon"],
+.dark [data-ui-theme="horizon"],
+[data-ui-theme="horizon"].dark {
+  --ui-surface: #0C1220;
+  --ui-card: #111827;
+  --ui-card-alt: #151E2E;
+  --ui-border: #1F2937;
+  --ui-input-bg: #111827;
+  --ui-input-border: #1F2937;
+  --ui-text: #F1F5F9;
+  --ui-text-muted: #94A3B8;
+  --ui-text-secondary: #64748B;
+}
+.dark[data-ui-theme="neo-brutal"],
+.dark [data-ui-theme="neo-brutal"],
+[data-ui-theme="neo-brutal"].dark {
+  --ui-surface: #0A0F1A;
+  --ui-card: #0F172A;
+  --ui-card-alt: #131C30;
+  --ui-border: #1E293B;
+  --ui-input-bg: #0F172A;
+  --ui-input-border: #1E293B;
+  --ui-text: #E2E8F0;
+  --ui-text-muted: #94A3B8;
+  --ui-text-secondary: #64748B;
+}
+.dark[data-ui-theme="forest"],
+.dark [data-ui-theme="forest"],
+[data-ui-theme="forest"].dark {
+  --ui-surface: #0D1510;
+  --ui-card: #111B15;
+  --ui-card-alt: #16231B;
+  --ui-border: #223529;
+  --ui-input-bg: #111B15;
+  --ui-input-border: #223529;
+  --ui-text: #ECFDF3;
+  --ui-text-muted: #A7B9AE;
+  --ui-text-secondary: #6B8F79;
+}
+.dark[data-ui-theme="royal-plum"],
+.dark [data-ui-theme="royal-plum"],
+[data-ui-theme="royal-plum"].dark {
+  --ui-surface: #140F23;
+  --ui-card: #1C1530;
+  --ui-card-alt: #241A3D;
+  --ui-border: #352454;
+  --ui-input-bg: #1C1530;
+  --ui-input-border: #352454;
+  --ui-text: #F5F3FF;
+  --ui-text-muted: #C4B5FD;
+  --ui-text-secondary: #A78BFA;
+}
+.dark[data-ui-theme="graphite"],
+.dark [data-ui-theme="graphite"],
+[data-ui-theme="graphite"].dark {
+  --ui-surface: #09090B;
+  --ui-card: #111113;
+  --ui-card-alt: #18181B;
+  --ui-border: #27272A;
+  --ui-input-bg: #111113;
+  --ui-input-border: #27272A;
+  --ui-text: #FAFAFA;
+  --ui-text-muted: #A1A1AA;
+  --ui-text-secondary: #71717A;
 }
 
 @layer utilities {

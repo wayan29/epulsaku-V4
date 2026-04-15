@@ -79,6 +79,25 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
     { label: "BNI", value: "BNI" },
   ];
 
+  const themedDialogClass =
+    "sm:max-w-lg border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+  const themedLabelClass =
+    "flex items-center font-medium text-[var(--ui-text)] dark:text-zinc-100";
+  const themedInputClass =
+    "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedSelectTriggerClass =
+    "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedSelectContentClass =
+    "border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+  const themedOutlineButtonClass =
+    "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedPrimaryButtonClass =
+    "rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+  const themedMutedTextClass =
+    "text-[var(--ui-text-muted)] dark:text-zinc-400";
+  const themedInfoCardClass =
+    "rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] dark:border-zinc-800 dark:bg-zinc-900";
+
   const handleDialogClose = () => {
     form.reset();
     setIsLoading(false);
@@ -156,17 +175,17 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isLoading || !isOpen) handleDialogClose(); else onOpenChange(isOpen);}}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={themedDialogClass}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <PiggyBank className="h-6 w-6 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-[var(--ui-text)] dark:text-zinc-100">
+            <PiggyBank className="h-6 w-6 text-[var(--ui-accent)]" />
             Request Digiflazz Deposit Ticket
           </DialogTitle>
-          {!depositResult && (
-            <DialogDescription>
-              Fill in the details below to request a deposit ticket for Digiflazz. Your PIN is required to authorize this request.
-            </DialogDescription>
-          )}
+          <DialogDescription className={themedMutedTextClass}>
+            {depositResult
+              ? "Review the result of your Digiflazz deposit request and complete the transfer with the payment details shown below."
+              : "Fill in the details below to request a deposit ticket for Digiflazz. Your PIN is required to authorize this request."}
+          </DialogDescription>
         </DialogHeader>
 
         {!depositResult ? (
@@ -177,9 +196,9 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center"><Info className="mr-2 h-4 w-4 text-muted-foreground" />Amount</FormLabel>
+                    <FormLabel className={themedLabelClass}><Info className="mr-2 h-4 w-4 text-[var(--ui-accent)]" />Amount</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 50000" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} />
+                      <Input type="number" placeholder="e.g., 50000" className={themedInputClass} {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -190,14 +209,14 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
                 name="bank"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center"><Landmark className="mr-2 h-4 w-4 text-muted-foreground" />Bank</FormLabel>
+                    <FormLabel className={themedLabelClass}><Landmark className="mr-2 h-4 w-4 text-[var(--ui-accent)]" />Bank</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className={themedSelectTriggerClass}>
                           <SelectValue placeholder="Select your bank for transfer" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent className={themedSelectContentClass}>
                         {bankOptions.map(option => (
                           <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                         ))}
@@ -212,16 +231,16 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
                 name="ownerName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground" />Bank Account Owner Name</FormLabel>
+                    <FormLabel className={themedLabelClass}><User className="mr-2 h-4 w-4 text-[var(--ui-accent)]" />Bank Account Owner Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Your full name as on bank account" {...field} />
+                      <Input placeholder="Your full name as on bank account" className={themedInputClass} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <div className="space-y-2 py-4 bg-muted/70 rounded-lg p-4 my-2">
-                <FormLabel htmlFor="pinDigiflazzDeposit" className="flex items-center justify-center text-sm font-medium text-foreground/80">
+              <div className={`space-y-2 rounded-2xl p-4 py-4 ${themedInfoCardClass}`}>
+                <FormLabel htmlFor="pinDigiflazzDeposit" className={`flex items-center justify-center text-sm font-medium ${themedMutedTextClass}`}>
                   <KeyRound className="mr-2 h-4 w-4" />
                   Transaction PIN
                 </FormLabel>
@@ -236,7 +255,7 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
                           type="password"
                           placeholder="● ● ● ● ● ●"
                           maxLength={6}
-                          className="text-center tracking-[0.5em] text-xl bg-background border-primary/50 focus:border-primary"
+                          className={`text-center tracking-[0.5em] text-xl ${themedInputClass}`}
                           {...field}
                         />
                       </FormControl>
@@ -247,9 +266,9 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
               </div>
               <DialogFooter className="pt-2">
                 <DialogClose asChild>
-                  <Button type="button" variant="outline" disabled={isLoading}>Cancel</Button>
+                  <Button type="button" variant="outline" disabled={isLoading} className={themedOutlineButtonClass}>Cancel</Button>
                 </DialogClose>
-                <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">
+                <Button type="submit" disabled={isLoading} className={themedPrimaryButtonClass}>
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Request Ticket
                 </Button>
@@ -260,43 +279,43 @@ export default function DigiflazzDepositDialog({ open, onOpenChange, onDepositSu
           <div className="py-4 space-y-4">
             {depositResult.isSuccess && depositResult.finalAmount && depositResult.notes ? (
               <>
-                <div className="p-4 bg-green-50 border border-green-200 rounded-md text-green-700 space-y-2">
+                <div className="space-y-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-green-700">
                   <h3 className="font-semibold text-lg flex items-center"><CheckCircle className="h-5 w-5 mr-2"/>Deposit Ticket Created!</h3>
                   <p>Please transfer the exact amount below to the Digiflazz account (details will be provided by Digiflazz system, this app does not show their bank account). Make sure to include the notes in your transfer description.</p>
                 </div>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between items-center p-3 bg-card rounded-md border">
+                <div className="space-y-3 text-sm text-[var(--ui-text)] dark:text-zinc-100">
+                  <div className={`flex items-center justify-between rounded-2xl p-3 ${themedInfoCardClass}`}>
                     <div>
-                      <span className="text-muted-foreground">Amount to Transfer:</span>
-                      <p className="font-bold text-xl text-primary">Rp {depositResult.finalAmount.toLocaleString()}</p>
+                      <span className={themedMutedTextClass}>Amount to Transfer:</span>
+                      <p className="font-bold text-xl text-[var(--ui-accent)]">Rp {depositResult.finalAmount.toLocaleString()}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(depositResult.finalAmount, 'Amount')}>
+                    <Button variant="ghost" size="sm" className="text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-100" onClick={() => copyToClipboard(depositResult.finalAmount, 'Amount')}>
                       <Copy className="h-4 w-4 mr-1" /> Copy
                     </Button>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-card rounded-md border">
+                  <div className={`flex items-center justify-between rounded-2xl p-3 ${themedInfoCardClass}`}>
                     <div>
-                      <span className="text-muted-foreground">Transfer Notes / Berita:</span>
-                      <p className="font-bold text-lg text-primary">{depositResult.notes}</p>
+                      <span className={themedMutedTextClass}>Transfer Notes / Berita:</span>
+                      <p className="font-bold text-lg text-[var(--ui-accent)]">{depositResult.notes}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(depositResult.notes, 'Notes')}>
+                    <Button variant="ghost" size="sm" className="text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-100" onClick={() => copyToClipboard(depositResult.notes, 'Notes')}>
                       <Copy className="h-4 w-4 mr-1" /> Copy
                     </Button>
                   </div>
-                   <p className="text-xs text-muted-foreground text-center pt-2">Transfer to the Digiflazz account (BCA/Mandiri/BRI/BNI) as selected previously. Account details are provided by Digiflazz through their official channels if needed.</p>
+                   <p className={`pt-2 text-center text-xs ${themedMutedTextClass}`}>Transfer to the Digiflazz account (BCA/Mandiri/BRI/BNI) as selected previously. Account details are provided by Digiflazz through their official channels if needed.</p>
                 </div>
                 <DialogFooter className="pt-4">
-                  <Button onClick={handleDialogClose} className="w-full">Close</Button>
+                  <Button onClick={handleDialogClose} className={`w-full ${themedPrimaryButtonClass}`}>Close</Button>
                 </DialogFooter>
               </>
             ) : (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 space-y-2">
+              <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
                 <h3 className="font-semibold text-lg flex items-center"><AlertTriangle className="h-5 w-5 mr-2"/>Deposit Request Failed</h3>
                 <p>{depositResult.message || "An unknown error occurred."}</p>
                 {depositResult.rc && <p className="text-xs">Response Code: {depositResult.rc}</p>}
                  <DialogFooter className="pt-4">
-                    <Button variant="outline" onClick={() => setDepositResult(null)} className="w-full sm:w-auto">Try Again</Button>
-                    <Button onClick={handleDialogClose} className="w-full sm:w-auto">Close</Button>
+                    <Button variant="outline" onClick={() => setDepositResult(null)} className={`w-full sm:w-auto ${themedOutlineButtonClass}`}>Try Again</Button>
+                    <Button onClick={handleDialogClose} className={`w-full sm:w-auto ${themedPrimaryButtonClass}`}>Close</Button>
                 </DialogFooter>
               </div>
             )}

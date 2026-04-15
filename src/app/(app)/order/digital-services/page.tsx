@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ShoppingBag, Loader2, AlertTriangle, RefreshCw, UserCheck, Info, ShieldCheck, Gamepad2, CreditCard, KeyRound, Zap, Wifi, Ticket, Smartphone, UserCircle2, Server, MapPin, Users, Send, CheckCircle, Clock, ListChecks, Tag, DollarSign } from "lucide-react";
+import { ShoppingBag, Loader2, AlertTriangle, RefreshCw, UserCheck, Info, ShieldCheck, Gamepad2, CreditCard, KeyRound, Zap, Wifi, Ticket, Smartphone, UserCircle2, Server, MapPin, Users, Send, CheckCircle, Clock, ListChecks, Tag, DollarSign, type LucideIcon } from "lucide-react";
 import OrderFormShell from '@/components/order/OrderFormShell';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -42,7 +42,7 @@ import {
 interface PageConfig {
   title: string;
   description: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   showCategoryFilter: boolean;
   productCardDescription: (product: DigiflazzProduct) => string;
   customerNoPlaceholder: (productBrand?: string, productDesc?: string) => string;
@@ -52,7 +52,7 @@ interface PageConfig {
   zoneIdOptions?: (productBrand?: string) => string[];
 }
 
-const localCategoryIcons: { [key: string]: React.ElementType } = {
+const localCategoryIcons: Record<string, LucideIcon> = {
   "e-money": CreditCard,
   "games": Gamepad2,
   "pln": Zap,
@@ -64,6 +64,85 @@ const localCategoryIcons: { [key: string]: React.ElementType } = {
 
 const honkaiStarRailRegions: HonkaiStarRailRegion[] = ["Asia", "America", "Europe", "TW, HK, MO"];
 const genshinImpactServers: string[] = ["Asia", "America", "Europe", "TW, HK, MO"];
+
+function normalizeCategorySelection(category?: string): string | undefined {
+  if (!category) {
+    return undefined;
+  }
+
+  const categoryUpper = category.trim().toUpperCase();
+
+  if (categoryUpper.includes("PULSA")) {
+    return "Pulsa";
+  }
+
+  if (categoryUpper.includes("PLN") || categoryUpper.includes("TOKEN")) {
+    return "PLN";
+  }
+
+  if (categoryUpper.includes("PAKET DATA") || categoryUpper === "DATA") {
+    return "Paket Data";
+  }
+
+  if (
+    categoryUpper.includes("GAME") ||
+    categoryUpper.includes("TOPUP") ||
+    categoryUpper.includes("VOUCHER GAME")
+  ) {
+    return "Games";
+  }
+
+  return category.trim();
+}
+
+function getProductCategoryFilterValue(product: DigiflazzProduct): string {
+  const productCategoryUpper = product.category.trim().toUpperCase();
+  const productBrandUpper = product.brand.trim().toUpperCase();
+
+  if (productCategoryUpper.includes("PULSA")) {
+    return "Pulsa";
+  }
+
+  if (
+    productCategoryUpper.includes("PLN") ||
+    productCategoryUpper.includes("TOKEN") ||
+    productBrandUpper.includes("PLN")
+  ) {
+    return "PLN";
+  }
+
+  if (
+    productCategoryUpper.includes("PAKET DATA") ||
+    productCategoryUpper === "DATA"
+  ) {
+    return "Paket Data";
+  }
+
+  if (
+    productCategoryUpper.includes("GAME") ||
+    productCategoryUpper.includes("TOPUP") ||
+    productBrandUpper.includes("GAME") ||
+    productBrandUpper.includes("VOUCHER GAME")
+  ) {
+    return "Games";
+  }
+
+  return product.category.trim();
+}
+
+function matchesSelectedCategoryFilter(
+  product: DigiflazzProduct,
+  selectedCategory?: string
+): boolean {
+  if (!selectedCategory) {
+    return true;
+  }
+
+  return (
+    getProductCategoryFilterValue(product).toUpperCase() ===
+    normalizeCategorySelection(selectedCategory)?.toUpperCase()
+  );
+}
 
 
 const getPageConfig = (category?: string, productBrand?: string): PageConfig => {
@@ -125,13 +204,13 @@ const getPageConfig = (category?: string, productBrand?: string): PageConfig => 
         if (brand?.includes("honkai star rail")) return "Select your HSR game server region. Cek Nickname (opsional).";
         if (brand?.includes("genshin impact")) return "Select your Genshin Impact game server. Cek Nickname (opsional).";
         if (brand?.includes("mobile legends")) return "Masukkan User ID & Zone ID Mobile Legends Anda. Klik \"Cek Nickname ML\" untuk verifikasi (opsional).";
-        return undefined;
+        return "";
     },
     zoneIdOptions: (currentProductBrand) => {
         const brand = currentProductBrand?.toLowerCase();
         if (brand?.includes("genshin impact")) return genshinImpactServers;
         if (brand?.includes("honkai star rail")) return honkaiStarRailRegions;
-        return undefined;
+        return [];
     }
   };
 };
@@ -171,7 +250,9 @@ export default function DigitalServicesPage() {
   const [productError, setProductError] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(
-    initialCategoryFromQuery ? decodeURIComponent(initialCategoryFromQuery) : undefined
+    initialCategoryFromQuery
+      ? normalizeCategorySelection(decodeURIComponent(initialCategoryFromQuery))
+      : undefined
   );
   const [selectedBrand, setSelectedBrand] = useState<string | undefined>(undefined);
   const [customerNo, setCustomerNo] = useState('');
@@ -208,7 +289,9 @@ export default function DigitalServicesPage() {
 
   useEffect(() => {
     const categoryFromQuery = searchParams.get('category');
-    const currentCategoryInState = categoryFromQuery ? decodeURIComponent(categoryFromQuery) : undefined;
+    const currentCategoryInState = categoryFromQuery
+      ? normalizeCategorySelection(decodeURIComponent(categoryFromQuery))
+      : undefined;
     if (currentCategoryInState !== selectedCategory) {
       setSelectedCategory(currentCategoryInState);
       setSelectedBrand(undefined);
@@ -290,12 +373,24 @@ export default function DigitalServicesPage() {
 
   const categories = useMemo(() => {
     if (isLoadingProducts || productError) return [];
-    return [...new Set(products.map(p => p.category))].sort();
+    return [
+      ...new Set(
+        products.map((product) => getProductCategoryFilterValue(product))
+      ),
+    ].sort();
   }, [products, isLoadingProducts, productError]);
 
   const brands = useMemo(() => {
     if (isLoadingProducts || productError || !selectedCategory) return [];
-    return [...new Set(products.filter(p => p.category === selectedCategory).map(p => p.brand))].sort();
+    return [
+      ...new Set(
+        products
+          .filter((product) =>
+            matchesSelectedCategoryFilter(product, selectedCategory)
+          )
+          .map((product) => product.brand)
+      ),
+    ].sort();
   }, [products, selectedCategory, isLoadingProducts, productError]);
 
   const productsToList = useMemo(() => {
@@ -303,7 +398,9 @@ export default function DigitalServicesPage() {
     let displayableProducts = products;
 
     if (selectedCategory) {
-      displayableProducts = displayableProducts.filter(p => p.category === selectedCategory);
+      displayableProducts = displayableProducts.filter((product) =>
+        matchesSelectedCategoryFilter(product, selectedCategory)
+      );
     }
     if (selectedBrand) {
       displayableProducts = displayableProducts.filter(p => p.brand === selectedBrand);
@@ -760,6 +857,21 @@ export default function DigitalServicesPage() {
 
   const needsZoneId = showMobileLegendsInquiryButton || showGenshinImpactInquiryButton || showHonkaiStarRailInquiryButton;
 
+  const themedLabelClass =
+    "font-semibold text-[var(--ui-text)] dark:text-zinc-100";
+  const themedInputClass =
+    "mt-1 flex-grow rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedSelectTriggerClass =
+    "w-full rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedSelectContentClass =
+    "border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+  const themedOutlineButtonClass =
+    "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedPrimaryButtonClass =
+    "w-full rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+  const themedInfoCardClass =
+    "rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+
 
   const proceedButtonDisabled = !selectedProduct ||
                                 isSubmittingWithPin ||
@@ -775,14 +887,14 @@ export default function DigitalServicesPage() {
       <OrderFormShell title={pageConfig.title} description={pageConfig.description} icon={pageConfig.icon}>
         <div className="space-y-6">
           {isLoadingProducts && (
-            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-              <Loader2 className="h-12 w-12 animate-spin mb-4" />
+            <div className="flex flex-col items-center justify-center py-10 text-[var(--ui-text-muted)] dark:text-zinc-400">
+              <Loader2 className="mb-4 h-12 w-12 animate-spin text-[var(--ui-accent)]" />
               <p className="text-lg">Loading products from Digiflazz...</p>
             </div>
           )}
 
           {productError && !isLoadingProducts && (
-            <Card className="text-center py-10 shadow border-destructive bg-destructive/10">
+            <Card className="border-destructive bg-destructive/10 py-10 text-center shadow">
               <CardHeader>
                   <CardTitle className="text-destructive flex items-center justify-center gap-2">
                       <AlertTriangle className="h-6 w-6" /> Error Loading Products
@@ -790,21 +902,21 @@ export default function DigitalServicesPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-destructive/90">{productError}</p>
-                <p className="text-sm text-muted-foreground mt-2">Please try again later or contact support if the issue persists.</p>
+                <p className="mt-2 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">Please try again later or contact support if the issue persists.</p>
               </CardContent>
             </Card>
           )}
 
           {!isLoadingProducts && !productError && products.length === 0 && (
-            <Card className="text-center py-10 shadow">
+            <Card className={`${themedInfoCardClass} py-10 text-center`}>
               <CardHeader>
-                <CardTitle className="text-muted-foreground flex items-center justify-center gap-2">
+                <CardTitle className="flex items-center justify-center gap-2 text-[var(--ui-text-muted)] dark:text-zinc-400">
                   <ShoppingBag className="h-6 w-6" /> No Products Available
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>No digital products could be loaded from Digiflazz at this time.</p>
-                <p className="text-sm text-muted-foreground mt-2">Please check back later or contact support.</p>
+                <p className="text-[var(--ui-text)] dark:text-zinc-100">No digital products could be loaded from Digiflazz at this time.</p>
+                <p className="mt-2 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">Please check back later or contact support.</p>
               </CardContent>
             </Card>
           )}
@@ -817,6 +929,7 @@ export default function DigitalServicesPage() {
                     onClick={handleManualRefresh}
                     disabled={isManuallyRefreshing || isLoadingProducts || isSubmittingWithPin}
                     variant="outline"
+                    className={themedOutlineButtonClass}
                   >
                     {isManuallyRefreshing ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -829,18 +942,22 @@ export default function DigitalServicesPage() {
                 <div className={`grid grid-cols-1 ${pageConfig.showCategoryFilter ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-4`}>
                   {pageConfig.showCategoryFilter && (
                     <div>
-                      <Label htmlFor="category-select">Filter by Category</Label>
+                      <Label htmlFor="category-select" className={themedLabelClass}>Filter by Category</Label>
                       <Select
                         value={selectedCategory || "all"}
                         onValueChange={(value) => {
-                          setSelectedCategory(value === 'all' ? undefined : value);
+                          setSelectedCategory(
+                            value === 'all'
+                              ? undefined
+                              : normalizeCategorySelection(value)
+                          );
                         }}
                         disabled={categories.length === 0 || isSubmittingWithPin}
                       >
-                        <SelectTrigger id="category-select" className="w-full">
+                        <SelectTrigger id="category-select" className={themedSelectTriggerClass}>
                           <SelectValue placeholder={categories.length > 0 ? "All Categories" : "No categories available"} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className={themedSelectContentClass}>
                           <SelectItem value="all">All Categories</SelectItem>
                           {categories.map(cat => (
                             <SelectItem key={cat} value={cat}>{cat}</SelectItem>
@@ -851,7 +968,7 @@ export default function DigitalServicesPage() {
                   )}
 
                   <div className={`${!pageConfig.showCategoryFilter ? 'md:col-span-1' : ''}`}>
-                    <Label htmlFor="brand-select">Filter by Brand {selectedCategory ? `(in ${selectedCategory})` : ''}</Label>
+                    <Label htmlFor="brand-select" className={themedLabelClass}>Filter by Brand {selectedCategory ? `(in ${selectedCategory})` : ''}</Label>
                     <Select
                       value={selectedBrand || "all"}
                       onValueChange={(value) => {
@@ -859,10 +976,10 @@ export default function DigitalServicesPage() {
                       }}
                       disabled={(!selectedCategory && !initialCategoryFromQuery) || brands.length === 0 || isSubmittingWithPin}
                     >
-                      <SelectTrigger id="brand-select" className="w-full">
+                      <SelectTrigger id="brand-select" className={themedSelectTriggerClass}>
                         <SelectValue placeholder={brands.length > 0 ? "All Brands" : (!selectedCategory && !initialCategoryFromQuery ? "Select category first" : "No brands available")} />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className={themedSelectContentClass}>
                         <SelectItem value="all">All Brands</SelectItem>
                         {brands.map(brand => (
                           <SelectItem key={brand} value={brand}>{brand}</SelectItem>
@@ -875,8 +992,8 @@ export default function DigitalServicesPage() {
 
               {productsToList.length > 0 ? (
                 <div className="space-y-4 pt-4">
-                  <h3 className="text-xl font-semibold flex items-center gap-2">
-                      {<pageConfig.icon className="h-5 w-5 text-primary" />}
+                  <h3 className="flex items-center gap-2 text-xl font-semibold text-[var(--ui-text)] dark:text-zinc-100">
+                      {<pageConfig.icon className="h-5 w-5 text-[var(--ui-accent)]" />}
                       {getProductListTitle()} ({productsToList.length})
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -888,20 +1005,21 @@ export default function DigitalServicesPage() {
                               onClick={() => handleProductSelect(product)}
                               className={`flex flex-col justify-between transition-shadow duration-200
                                           ${isSubmittingWithPin ? 'opacity-60 cursor-not-allowed' : isActive ? 'cursor-pointer hover:shadow-lg' : 'opacity-60 cursor-not-allowed'}
-                                          ${selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive ? 'ring-2 ring-primary border-primary shadow-lg' : 'border-border shadow-md'}`}
+                                          ${selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive ? 'ring-2 ring-[var(--ui-accent)] border-[var(--ui-accent)] shadow-lg' : 'border-[var(--ui-border)] shadow-md'}
+                                          ${themedInfoCardClass}`}
                           >
                             <div>
                               <CardHeader className="pb-2">
                                   <div className="flex justify-between items-start">
-                                      <CardTitle className="text-md font-semibold leading-tight">{product.product_name}</CardTitle>
-                                      {selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive && <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0" />}
+                                      <CardTitle className="text-md leading-tight text-[var(--ui-text)] dark:text-zinc-100 font-semibold">{product.product_name}</CardTitle>
+                                      {selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive && <ShieldCheck className="h-5 w-5 text-[var(--ui-accent)] flex-shrink-0" />}
                                   </div>
-                                  <CardDescription className="text-xs">
+                                  <CardDescription className="text-xs text-[var(--ui-text-muted)] dark:text-zinc-400">
                                     {pageConfig.productCardDescription(product)}
                                   </CardDescription>
                               </CardHeader>
                               <CardContent className="space-y-1.5 pt-0 pb-3">
-                                  <p className={`text-lg font-bold ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>Rp {product.price.toLocaleString()}</p>
+                                  <p className={`text-lg font-bold ${isActive ? 'text-[var(--ui-accent)]' : 'text-[var(--ui-text-muted)] dark:text-zinc-400'}`}>Rp {product.price.toLocaleString()}</p>
                                   <div className="flex flex-wrap gap-1.5">
                                   {isActive ? (
                                       <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-300">
@@ -913,7 +1031,7 @@ export default function DigitalServicesPage() {
                                       </Badge>
                                   )}
                                   </div>
-                                  {product.desc && <p className="text-xs text-muted-foreground italic pt-1 truncate" title={product.desc}>Desc: {product.desc}</p>}
+                                  {product.desc && <p className="pt-1 text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400 truncate" title={product.desc}>Desc: {product.desc}</p>}
                               </CardContent>
                             </div>
                           </Card>
@@ -921,8 +1039,8 @@ export default function DigitalServicesPage() {
                     })}
                   </div>
                   {selectedProduct && (
-                      <div className="p-3 bg-primary/10 rounded-md mt-3 border border-primary/30 text-center">
-                          <p className="font-semibold text-primary">Selected: {selectedProduct.product_name} (Modal: Rp {selectedProduct.price.toLocaleString()})</p>
+                      <div className="mt-3 rounded-2xl border border-[var(--ui-accent)]/30 bg-[var(--ui-accent-bg)] p-3 text-center">
+                          <p className="font-semibold text-[var(--ui-accent)]">Selected: {selectedProduct.product_name} (Modal: Rp {selectedProduct.price.toLocaleString()})</p>
                           {!(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) && (
                               <p className="text-sm text-destructive">(This product is currently not available for purchase)</p>
                           )}
@@ -930,12 +1048,12 @@ export default function DigitalServicesPage() {
                   )}
                 </div>
               ) : (
-                <Card className="text-center py-10 shadow mt-4">
+                <Card className={`${themedInfoCardClass} mt-4 py-10 text-center`}>
                   <CardContent>
-                    <p className="text-muted-foreground">
+                    <p className="text-[var(--ui-text-muted)] dark:text-zinc-400">
                       {selectedCategory || selectedBrand ? "No products match your current filters." : "No products available at the moment."}
                     </p>
-                    <p className="text-sm text-muted-foreground mt-2">
+                    <p className="mt-2 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
                       {selectedCategory || selectedBrand ? "Try adjusting your selections or reset them." : "Please check back later."}
                     </p>
                   </CardContent>
@@ -945,19 +1063,19 @@ export default function DigitalServicesPage() {
           )}
 
           {selectedProduct && (
-            <Card className="mt-8 shadow-xl border-2 border-primary" id="order-confirmation-section">
-              <CardHeader className="bg-primary/10">
-                <CardTitle className="text-xl text-primary">Order Confirmation: {selectedProduct.product_name}</CardTitle>
-                <CardDescription className="text-primary/80">
+            <Card className="mt-8 border-2 border-[var(--ui-accent)]/25 bg-[var(--ui-card)] shadow-xl dark:border-sky-400/20 dark:bg-zinc-950" id="order-confirmation-section">
+              <CardHeader className="bg-[var(--ui-accent-bg)]">
+                <CardTitle className="text-xl text-[var(--ui-accent)]">Order Confirmation: {selectedProduct.product_name}</CardTitle>
+                <CardDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">
                   Price (Modal): Rp {selectedProduct.price.toLocaleString()} | SKU: {selectedProduct.buyer_sku_code}
                   {!(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) &&
                       <span className="font-semibold text-destructive block"> (Currently Not Available)</span>
                   }
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4 pt-6">
+              <CardContent className="space-y-4 pt-6 text-[var(--ui-text)] dark:text-zinc-100">
                 <div>
-                  <Label htmlFor="customer-no" className="font-semibold">{pageConfig.customerNoPlaceholder(selectedProduct.brand, selectedProduct.desc)}</Label>
+                  <Label htmlFor="customer-no" className={themedLabelClass}>{pageConfig.customerNoPlaceholder(selectedProduct.brand, selectedProduct.desc ?? undefined)}</Label>
                   <div className={`flex items-start gap-2 ${showPlnInquiryButton || showFreeFireInquiryButton || needsZoneId ? 'flex-col sm:flex-row' : ''}`}>
                       <Input
                       id="customer-no"
@@ -970,8 +1088,8 @@ export default function DigitalServicesPage() {
                           if (giInquiryResult) setGiInquiryResult(null);
                           if (hsrInquiryResult) setHsrInquiryResult(null);
                       }}
-                      placeholder={pageConfig.customerNoPlaceholder(selectedProduct.brand, selectedProduct.desc)}
-                      className="mt-1 flex-grow"
+                      placeholder={pageConfig.customerNoPlaceholder(selectedProduct.brand, selectedProduct.desc ?? undefined)}
+                      className={themedInputClass}
                       disabled={!(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                       />
                       {showPlnInquiryButton && (
@@ -979,7 +1097,7 @@ export default function DigitalServicesPage() {
                           onClick={handlePlnInquiry}
                           disabled={isCheckingPlnId || !customerNo.trim() || !(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                           variant="outline"
-                          className="mt-1 w-full sm:w-auto"
+                          className={`mt-1 w-full sm:w-auto ${themedOutlineButtonClass}`}
                       >
                           {isCheckingPlnId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}
                           Cek ID PLN
@@ -990,21 +1108,21 @@ export default function DigitalServicesPage() {
                           onClick={handleFreeFireNicknameInquiry}
                           disabled={isCheckingFfNickname || !customerNo.trim() || !(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                           variant="outline"
-                          className="mt-1 w-full sm:w-auto"
+                          className={`mt-1 w-full sm:w-auto ${themedOutlineButtonClass}`}
                       >
                           {isCheckingFfNickname ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCircle2 className="mr-2 h-4 w-4" />}
                           Cek Nickname FF
                       </Button>
                       )}
                   </div>
-                  {selectedProduct.desc && !showPlnInquiryButton && !showFreeFireInquiryButton && !needsZoneId && <p className="text-xs text-muted-foreground mt-1 italic">Hint: {selectedProduct.desc}</p>}
+                  {selectedProduct.desc && !showPlnInquiryButton && !showFreeFireInquiryButton && !needsZoneId && <p className="mt-1 text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400">Hint: {selectedProduct.desc}</p>}
                   {showPlnInquiryButton && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">
+                      <p className="mt-1 text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400">
                       Untuk produk PLN, masukkan ID Pelanggan atau Nomor Meter. Klik "Cek ID PLN" untuk verifikasi.
                       </p>
                   )}
                   {showFreeFireInquiryButton && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">
+                      <p className="mt-1 text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400">
                       Masukkan User ID Free Fire Anda. Klik "Cek Nickname FF" untuk verifikasi (opsional).
                       </p>
                   )}
@@ -1012,7 +1130,7 @@ export default function DigitalServicesPage() {
 
                 {needsZoneId && (
                   <div className="space-y-1">
-                      <Label htmlFor="zone-id" className="font-semibold">{pageConfig.zoneIdLabel?.(selectedProduct.brand)}</Label>
+                      <Label htmlFor="zone-id" className={themedLabelClass}>{pageConfig.zoneIdLabel?.(selectedProduct.brand)}</Label>
                       <div className="flex items-start gap-2 flex-col sm:flex-row">
                           {pageConfig.zoneIdOptions?.(selectedProduct.brand) ? (
                               <Select
@@ -1025,10 +1143,10 @@ export default function DigitalServicesPage() {
                                   }}
                                   disabled={!(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                               >
-                                  <SelectTrigger id="zone-id-select" className="mt-1 flex-grow">
+                                  <SelectTrigger id="zone-id-select" className={themedInputClass}>
                                       <SelectValue placeholder={pageConfig.zoneIdPlaceholder?.(selectedProduct.brand) || "Select Zone/Server"} />
                                   </SelectTrigger>
-                                  <SelectContent>
+                                  <SelectContent className={themedSelectContentClass}>
                                       {pageConfig.zoneIdOptions(selectedProduct.brand)?.map(opt => (
                                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                       ))}
@@ -1043,7 +1161,7 @@ export default function DigitalServicesPage() {
                                       if (mlInquiryResult) setMlInquiryResult(null);
                                   }}
                                   placeholder={pageConfig.zoneIdPlaceholder?.(selectedProduct.brand)}
-                                  className="mt-1 flex-grow"
+                                  className={themedInputClass}
                                   disabled={!(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                               />
                           )}
@@ -1053,7 +1171,7 @@ export default function DigitalServicesPage() {
                                   onClick={handleMobileLegendsNicknameInquiry}
                                   disabled={isCheckingMlNickname || !customerNo.trim() || !zoneId.trim() || !(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                                   variant="outline"
-                                  className="mt-1 w-full sm:w-auto"
+                                  className={`mt-1 w-full sm:w-auto ${themedOutlineButtonClass}`}
                               >
                                   {isCheckingMlNickname ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Server className="mr-2 h-4 w-4" />}
                                   Cek Nickname ML
@@ -1064,7 +1182,7 @@ export default function DigitalServicesPage() {
                                   onClick={handleGenshinImpactNicknameInquiry}
                                   disabled={isCheckingGiNickname || !customerNo.trim() || !zoneId.trim() || !(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                                   variant="outline"
-                                  className="mt-1 w-full sm:w-auto"
+                                  className={`mt-1 w-full sm:w-auto ${themedOutlineButtonClass}`}
                               >
                                   {isCheckingGiNickname ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
                                   Cek Nickname GI
@@ -1075,7 +1193,7 @@ export default function DigitalServicesPage() {
                                   onClick={handleHonkaiStarRailNicknameInquiry}
                                   disabled={isCheckingHsrNickname || !customerNo.trim() || !zoneId.trim() || !(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) || isSubmittingWithPin}
                                   variant="outline"
-                                  className="mt-1 w-full sm:w-auto"
+                                  className={`mt-1 w-full sm:w-auto ${themedOutlineButtonClass}`}
                               >
                                   {isCheckingHsrNickname ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
                                   Cek Nickname HSR
@@ -1083,7 +1201,7 @@ export default function DigitalServicesPage() {
                           )}
                       </div>
                       {pageConfig.zoneIdHint?.(selectedProduct.brand) && (
-                          <p className="text-xs text-muted-foreground mt-1 italic">
+                          <p className="mt-1 text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400">
                               {pageConfig.zoneIdHint(selectedProduct.brand)}
                           </p>
                       )}
@@ -1180,7 +1298,7 @@ export default function DigitalServicesPage() {
 
                 <Button
                   onClick={handleInitiateOrder}
-                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground text-lg py-6"
+                  className={`${themedPrimaryButtonClass} py-6 text-lg`}
                   disabled={proceedButtonDisabled || isSubmittingWithPin}
                 >
                   {isSubmittingWithPin ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-5 w-5" />}
@@ -1192,19 +1310,19 @@ export default function DigitalServicesPage() {
         </div>
       </OrderFormShell>
     ) : (
-      <Card className="mt-8 shadow-xl border-2 border-primary">
-        <CardHeader className="bg-primary/10">
+      <Card className="mt-8 border-2 border-[var(--ui-accent)]/25 bg-[var(--ui-card)] shadow-xl dark:border-sky-400/20 dark:bg-zinc-950">
+        <CardHeader className="bg-[var(--ui-accent-bg)]">
           <div className="flex items-center gap-3">
             {lastSubmittedOrder.status === "Sukses" ? <CheckCircle className="h-8 w-8 text-green-500" /> : lastSubmittedOrder.status === "Pending" ? <Clock className="h-8 w-8 text-yellow-500" /> : <AlertTriangle className="h-8 w-8 text-red-500" />}
-            <CardTitle className="text-xl text-primary">
+            <CardTitle className="text-xl text-[var(--ui-accent)]">
               {lastSubmittedOrder.status === "Sukses" ? "Transaction Successful" : lastSubmittedOrder.status === "Pending" ? "Transaction Pending" : "Transaction Failed"}
             </CardTitle>
           </div>
-          <CardDescription className="text-primary/80">
+          <CardDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">
             Ref ID: {lastSubmittedOrder.refId}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3 pt-6 text-[var(--ui-text)] dark:text-zinc-100">
           <p><strong>Product:</strong> {lastSubmittedOrder.productName}</p>
           <p><strong>Details:</strong> {lastSubmittedOrder.customerNoDisplay}</p>
           <p><strong>Harga Jual (Estimasi):</strong> Rp {lastSubmittedOrder.sellingPrice.toLocaleString()}</p>
@@ -1215,15 +1333,15 @@ export default function DigitalServicesPage() {
             </div>
           )}
           <div><strong>Status:</strong> <Badge variant={lastSubmittedOrder.status === 'Sukses' ? 'default' : lastSubmittedOrder.status === 'Gagal' ? 'destructive' : 'secondary'} className={`${lastSubmittedOrder.status === 'Sukses' ? 'bg-green-100 text-green-800 border-green-300' : lastSubmittedOrder.status === 'Gagal' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}>{lastSubmittedOrder.status}</Badge></div>
-          {lastSubmittedOrder.message && <p className="text-sm text-muted-foreground"><strong>Message:</strong> {lastSubmittedOrder.message}</p>}
-          {lastSubmittedOrder.sn && <p><strong>Serial Number (SN):</strong> <span className="font-mono text-primary">{lastSubmittedOrder.sn}</span></p>}
-          <p className="text-xs text-muted-foreground italic">Catatan: Harga Jual dan Profit yang ditampilkan di sini adalah estimasi. Nilai final tercatat di Riwayat Transaksi.</p>
+          {lastSubmittedOrder.message && <p className="text-sm text-[var(--ui-text-muted)] dark:text-zinc-400"><strong>Message:</strong> {lastSubmittedOrder.message}</p>}
+          {lastSubmittedOrder.sn && <p><strong>Serial Number (SN):</strong> <span className="font-mono text-[var(--ui-accent)]">{lastSubmittedOrder.sn}</span></p>}
+          <p className="text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400">Catatan: Harga Jual dan Profit yang ditampilkan di sini adalah estimasi. Nilai final tercatat di Riwayat Transaksi.</p>
 
           <div className="flex flex-col sm:flex-row gap-3 pt-4">
-            <Button onClick={() => router.push('/transactions')} className="w-full sm:w-auto">
+            <Button onClick={() => router.push('/transactions')} className="w-full rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)] sm:w-auto">
               <ListChecks className="mr-2 h-4 w-4" /> View Transaction History
             </Button>
-            <Button onClick={() => setLastSubmittedOrder(null)} variant="outline" className="w-full sm:w-auto">
+            <Button onClick={() => setLastSubmittedOrder(null)} variant="outline" className={`w-full sm:w-auto ${themedOutlineButtonClass}`}>
               <Tag className="mr-2 h-4 w-4" /> Place New Order
             </Button>
           </div>
@@ -1239,16 +1357,16 @@ export default function DigitalServicesPage() {
               setIsConfirmingOrder(true);
           }
         }}>
-          <AlertDialogContent>
+          <AlertDialogContent className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
             <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <ShieldCheck className="h-6 w-6 text-primary" />
+              <AlertDialogTitle className="flex items-center gap-2 text-[var(--ui-text)] dark:text-zinc-100">
+                <ShieldCheck className="h-6 w-6 text-[var(--ui-accent)]" />
                 Confirm Your Order
               </AlertDialogTitle>
-              <AlertDialogDescription className="pt-2 text-sm text-foreground">
+              <AlertDialogDescription className="pt-2 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
                 Please review your order and enter PIN to confirm:
               </AlertDialogDescription>
-              <div className="pt-2 space-y-1 text-sm text-foreground">
+              <div className="space-y-1 pt-2 text-sm text-[var(--ui-text)] dark:text-zinc-100">
                 <div><strong>Product:</strong> {orderDetailsToConfirmForPin.product.product_name}</div>
                 <div><strong>Harga Modal:</strong> Rp {orderDetailsToConfirmForPin.product.price.toLocaleString()}</div>
                 <div><strong>{orderDetailsToConfirmForPin.zoneId ? "User ID:" : "Customer No/ID:"}</strong> {orderDetailsToConfirmForPin.customerNo}</div>
@@ -1273,8 +1391,8 @@ export default function DigitalServicesPage() {
               </div>
             </AlertDialogHeader>
 
-            <div className="space-y-2 py-4 bg-muted/70 rounded-lg p-4 my-4">
-              <Label htmlFor="digitalServicePinInput" className="flex items-center justify-center text-sm font-medium text-foreground/80">
+            <div className="my-4 space-y-2 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <Label htmlFor="digitalServicePinInput" className="flex items-center justify-center text-sm font-medium text-[var(--ui-text-muted)] dark:text-zinc-400">
                 <KeyRound className="mr-2 h-4 w-4" />
                 Transaction PIN
               </Label>
@@ -1291,7 +1409,7 @@ export default function DigitalServicesPage() {
                 }}
                 placeholder="● ● ● ● ● ●"
                 maxLength={6}
-                className="text-center tracking-[0.5em] text-xl bg-background border-primary/50 focus:border-primary"
+                className="text-center tracking-[0.5em] text-xl rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               />
               {pinError && <p className="text-sm text-destructive text-center pt-2">{pinError}</p>}
             </div>
@@ -1301,10 +1419,10 @@ export default function DigitalServicesPage() {
                     setIsConfirmingOrder(false);
                     setPinInput("");
                     setPinError("");
-                }} disabled={isSubmittingWithPin}>
+                }} disabled={isSubmittingWithPin} className={themedOutlineButtonClass}>
                     Cancel
                 </AlertDialogCancel>
-                <Button onClick={handlePinConfirmDigitalService} disabled={isSubmittingWithPin || pinInput.length !== 6} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button onClick={handlePinConfirmDigitalService} disabled={isSubmittingWithPin || pinInput.length !== 6} className="rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]">
                 {isSubmittingWithPin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirm & Pay
                 </Button>

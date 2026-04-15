@@ -1,5 +1,5 @@
 // src/lib/mongodb.ts
-import { MongoClient, Db, ObjectId, FindOptions } from 'mongodb';
+import { MongoClient, Db, ObjectId, FindOptions, AggregateOptions, Document } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME;
@@ -25,7 +25,7 @@ interface QueryOptions {
     count?: boolean;
 }
 
-async function connectToDatabase() {
+export async function connectToDatabase() {
   if (cachedClient && cachedDb) {
     return { client: cachedClient, db: cachedDb };
   }
@@ -59,9 +59,18 @@ function convertQueryIds(query: any): any {
  * @param query The MongoDB query object.
  * @returns True if the query is likely for a single document.
  */
-function isSingleDocQuery(query: object): boolean {
-    const uniqueKeys = ['_id', 'username', 'id']; // Add other unique keys as needed
-    return Object.keys(query).some(key => uniqueKeys.includes(key) && typeof (query as any)[key] !== 'object');
+function isSingleDocQuery(collectionName: string, query: object): boolean {
+    const collectionUniqueKeys: Record<string, string[]> = {
+        users: ['username'],
+    };
+    const uniqueKeys = new Set(['_id', 'id', ...(collectionUniqueKeys[collectionName] || [])]);
+    return Object.keys(query).some((key) => {
+        if (!uniqueKeys.has(key)) return false;
+        const value = (query as any)[key];
+        if (value === null || typeof value === 'undefined') return false;
+        if (key === '_id' || key === 'id') return !Array.isArray(value) && !value?.$in;
+        return typeof value !== 'object';
+    });
 }
 
 
@@ -81,7 +90,7 @@ export async function readDb<T>(collectionName: string, queryOptions?: QueryOpti
 
   // If the query is for a unique field OR it's a known single-doc config collection
   // without a query, fetch one document.
-  if (isSingleDocQuery(query) || (singleDocConfigCollections.includes(collectionName) && Object.keys(query).length === 0)) {
+  if (isSingleDocQuery(collectionName, query) || (singleDocConfigCollections.includes(collectionName) && Object.keys(query).length === 0)) {
     const document = await collection.findOne(query, options);
     return document as T;
   }
@@ -91,9 +100,22 @@ export async function readDb<T>(collectionName: string, queryOptions?: QueryOpti
   return documents as unknown as T;
 }
 
+export async function aggregateDb<T extends Document = Document>(
+  collectionName: string,
+  pipeline: Document[],
+  options?: AggregateOptions
+): Promise<T[]> {
+  const { db } = await connectToDatabase();
+  const collection = db.collection(collectionName);
+
+  const documents = await collection.aggregate<T>(pipeline, options).toArray();
+  return documents;
+}
+
 interface WriteOptions {
     mode?: 'updateOne' | 'insertOne' | 'replaceCollection' | 'deleteOne' | 'deleteMany';
     query?: object;
+    upsert?: boolean;
 }
 
 export async function writeDb<T>(collectionName: string, data: T | Partial<T> | null, options?: WriteOptions): Promise<any> {
@@ -101,6 +123,7 @@ export async function writeDb<T>(collectionName: string, data: T | Partial<T> | 
     const collection = db.collection(collectionName);
     const mode = options?.mode || 'replaceCollection';
     const query = convertQueryIds(options?.query);
+    const upsert = options?.upsert ?? false;
 
     switch (mode) {
         case 'insertOne':
@@ -124,7 +147,7 @@ export async function writeDb<T>(collectionName: string, data: T | Partial<T> | 
             if (Object.keys(setOps).length > 0) updateData.$set = setOps;
             if (Object.keys(incOps).length > 0) updateData.$inc = incOps;
             
-            return await collection.updateOne(query, updateData);
+            return await collection.updateOne(query, updateData, { upsert });
         case 'deleteOne':
              if (!query) throw new Error("Query is required for deleteOne operation");
              return await collection.deleteOne(query);

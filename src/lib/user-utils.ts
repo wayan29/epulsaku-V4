@@ -4,18 +4,77 @@
 import { readDb, writeDb } from './mongodb';
 import bcrypt from 'bcryptjs';
 import type { StoredUser, User, UserRole, LoginActivity, UserUpdatePayload } from './auth-utils';
-import { JWT_SECRET, SALT_ROUNDS } from './auth-utils';
+export type { StoredUser, LoginActivity } from './auth-utils';
+import { SALT_ROUNDS, hasAllAccess, isSuperAdminRole, normalizeUserRole } from './auth-utils';
+import type { UiThemeName } from './ui-theme';
+import { isUiThemeName } from './ui-theme';
 import { subDays } from 'date-fns';
 import { trySendTelegramNotification } from './notification-utils';
 import type { ObjectId } from 'mongodb';
+import { verifyAuth } from '@/app/api/auth/actions';
+import { syncLegacyUserByIdToBetterAuth } from '@/lib/better-auth-bridge';
 
 // Helper to make user objects serializable for client components
 const makeUserSerializable = (user: any): StoredUser => {
   if (user._id && typeof user._id !== 'string') {
     user._id = user._id.toHexString();
   }
+  const normalizedRole = normalizeUserRole(user.role);
+  if (normalizedRole) {
+    user.role = normalizedRole;
+  }
   return user as StoredUser;
 };
+
+function canManageUsers(user: { role?: string; permissions?: string[] } | null | undefined): boolean {
+  return !!user && (
+    isSuperAdminRole(user.role) ||
+    hasAllAccess(user.permissions) ||
+    user.permissions?.includes('manajemen_pengguna') === true
+  );
+}
+
+export async function getActingUserFromSession(fallbackUserId?: string): Promise<StoredUser | null> {
+  const { isAuthenticated, user } = await verifyAuth();
+  if (!isAuthenticated || !user) return null;
+
+  let sessionUser = user.id
+    ? await readDb<any>("users", { query: { _id: user.id } })
+    : null;
+
+  if (!sessionUser && user.username) {
+    sessionUser = await readDb<any>("users", { query: { username: user.username.toLowerCase() } });
+  }
+
+  if (!sessionUser && fallbackUserId) {
+    sessionUser = await readDb<any>("users", { query: { _id: fallbackUserId } });
+  }
+
+  return sessionUser ? makeUserSerializable(sessionUser) : null;
+}
+
+export async function getCurrentUserThemePreference(): Promise<UiThemeName | null> {
+  const sessionUser = await getActingUserFromSession();
+  if (!sessionUser?.uiThemePreference) return null;
+
+  return isUiThemeName(sessionUser.uiThemePreference) ? sessionUser.uiThemePreference : null;
+}
+
+export async function setCurrentUserThemePreference(theme: UiThemeName): Promise<{ success: boolean; message: string }> {
+  try {
+    const sessionUser = await getActingUserFromSession();
+    if (!sessionUser) {
+      return { success: false, message: "Unauthorized: You must be signed in to change your UI theme." };
+    }
+
+    await writeDb("users", { uiThemePreference: theme }, { mode: 'updateOne', query: { _id: sessionUser._id } });
+
+    return { success: true, message: "UI theme updated successfully." };
+  } catch (error) {
+    console.error("Error updating current user theme preference:", error);
+    return { success: false, message: error instanceof Error ? error.message : "Failed to update UI theme." };
+  }
+}
 
 // --- Login Activity Pruning ---
 async function pruneOldLoginActivity(): Promise<void> {
@@ -76,10 +135,6 @@ export async function createUser({
   adminPasswordConfirmation?: string;
 }): Promise<{ success: boolean; message: string; user?: User }> {
   try {
-    if (!JWT_SECRET) {
-      console.error("FATAL: JWT_SECRET environment variable is not set. Cannot create user.");
-      return { success: false, message: "Server configuration error: JWT secret is missing." };
-    }
     const userCount = await checkIfUsersExist();
     let finalRole: UserRole;
 
@@ -89,9 +144,9 @@ export async function createUser({
        if (!creatorId) {
         return { success: false, message: "Creator ID is required to create a new user." };
       }
-      const creator = await readDb<any>("users", { query: { _id: creatorId }});
-      if (!creator || creator.role !== 'super_admin') {
-         return { success: false, message: "Only a super_admin can create new users." };
+      const creator = await getActingUserFromSession(creatorId);
+      if (!creator || !canManageUsers(creator)) {
+         return { success: false, message: "Permission denied. Your account cannot create users." };
       }
       if (!role || (role !== 'admin' && role !== 'staf')) {
         return { success: false, message: "A valid role ('admin' or 'staf') must be assigned by the super_admin." };
@@ -134,6 +189,7 @@ export async function createUser({
     
     const result = await writeDb("users", newUser, { mode: 'insertOne' });
     const newUserId = result.insertedId.toHexString();
+    await syncLegacyUserByIdToBetterAuth(newUserId);
     const userForToken: User = { id: newUserId, username: newUser.username, role: newUser.role, permissions: newUser.permissions };
 
     return {
@@ -166,16 +222,19 @@ export async function recordLoginSuccess(user: StoredUser, userAgent: string | n
 
 export async function deleteUser(userIdToDelete: string, currentAdminId: string): Promise<{ success: boolean; message: string }> {
     try {
-        const admin = await readDb<any>("users", { query: { _id: currentAdminId } });
+        const admin = await getActingUserFromSession(currentAdminId);
 
-        if (!admin || admin.role !== 'super_admin') {
-            return { success: false, message: "Permission denied. Only a super_admin can delete users." };
+        if (!canManageUsers(admin)) {
+            return { success: false, message: "Permission denied. Your account cannot delete users." };
+        }
+        if (admin && admin._id === userIdToDelete) {
+            return { success: false, message: "You cannot delete your own account from this page." };
         }
         const userToDelete = await readDb<any>("users", { query: { _id: userIdToDelete } });
         if (!userToDelete) {
             return { success: false, message: "User to delete not found." };
         }
-        if (userToDelete.role === 'super_admin') {
+        if (isSuperAdminRole(userToDelete.role)) {
             return { success: false, message: "Cannot delete the super_admin account." };
         }
 
@@ -190,9 +249,12 @@ export async function deleteUser(userIdToDelete: string, currentAdminId: string)
 
 export async function updateUser({ userId, updates, editorId }: { userId: string, updates: UserUpdatePayload, editorId: string }): Promise<{ success: boolean; message: string }> {
     try {
-        const editor = await readDb<any>("users", { query: { _id: editorId } });
-        if (!editor || editor.role !== 'super_admin') {
-            return { success: false, message: "Permission denied. Only a super_admin can edit users." };
+        const editor = await getActingUserFromSession(editorId);
+        if (!canManageUsers(editor)) {
+            return { success: false, message: "Permission denied. Your account cannot edit users." };
+        }
+        if (editor && editor._id === userId) {
+            return { success: false, message: "You cannot edit your own account from this page." };
         }
 
         const userToUpdate = await readDb<any>("users", { query: { _id: userId } });
@@ -200,7 +262,7 @@ export async function updateUser({ userId, updates, editorId }: { userId: string
             return { success: false, message: "User not found." };
         }
         
-        if (userToUpdate.role === 'super_admin') {
+        if (isSuperAdminRole(userToUpdate.role)) {
             return { success: false, message: "Cannot modify the super_admin account via this form." };
         }
         
@@ -216,6 +278,7 @@ export async function updateUser({ userId, updates, editorId }: { userId: string
         if (typeof updates.telegramChatId !== 'undefined') updatePayload.telegramChatId = updates.telegramChatId;
         
         await writeDb("users", updatePayload, { mode: 'updateOne', query: { _id: userId } });
+        await syncLegacyUserByIdToBetterAuth(userId);
 
         return { success: true, message: "User updated successfully." };
     } catch (error) {
@@ -290,6 +353,7 @@ export async function changePassword(username: string, oldPasswordPlain: string,
   
   const newHashedPassword = await bcrypt.hash(newPasswordPlain, SALT_ROUNDS);
   await writeDb("users", { hashedPassword: newHashedPassword }, { mode: 'updateOne', query: { _id: user._id } });
+  await syncLegacyUserByIdToBetterAuth(user._id.toHexString());
 
   return { success: true, message: "Password changed successfully. Please log in again." };
 }
@@ -324,15 +388,18 @@ export async function deleteLoginActivityEntry(activityId: string | null): Promi
 
 export async function toggleUserStatus(userIdToToggle: string, adminId: string): Promise<{ success: boolean; message: string }> {
   try {
-    const admin = await readDb<any>("users", { query: { _id: adminId } });
-    if (!admin || admin.role !== 'super_admin') {
-      return { success: false, message: "Permission denied. Only a super_admin can change user status." };
+    const admin = await getActingUserFromSession(adminId);
+    if (!admin || !canManageUsers(admin)) {
+      return { success: false, message: "Permission denied. Your account cannot change user status." };
+    }
+    if (admin._id === userIdToToggle) {
+      return { success: false, message: "You cannot disable your own account from this page." };
     }
     const userToToggle = await readDb<any>("users", { query: { _id: userIdToToggle } });
     if (!userToToggle) {
       return { success: false, message: "User not found." };
     }
-    if (userToToggle.role === 'super_admin') {
+    if (isSuperAdminRole(userToToggle.role)) {
       return { success: false, message: "Cannot disable the super_admin account." };
     }
     const newDisabledStatus = !userToToggle.isDisabled;
@@ -341,6 +408,7 @@ export async function toggleUserStatus(userIdToToggle: string, adminId: string):
         updatePayload.failedPinAttempts = 0;
     }
     await writeDb("users", updatePayload, { mode: 'updateOne', query: { _id: userToToggle._id } });
+    await syncLegacyUserByIdToBetterAuth(userToToggle._id.toHexString());
     
     trySendTelegramNotification({
         provider: 'System',

@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
+import { hasPermission } from '@/lib/auth-utils';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -26,7 +27,7 @@ export default function ProtectedRoute({ children, requiredPermission }: Protect
     );
   }
 
-  const hasAccess = user && (user.role === 'super_admin' || user.permissions?.includes('all_access') || user.permissions?.includes(requiredPermission));
+  const hasAccess = hasPermission(user, requiredPermission);
 
   if (!hasAccess) {
     return (

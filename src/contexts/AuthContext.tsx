@@ -1,11 +1,10 @@
 // src/contexts/AuthContext.tsx
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, type ReactNode, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@/lib/auth-utils';
 import { Loader2 } from 'lucide-react';
-import { verifyAuth } from '@/app/api/auth/actions'; // Using the server action for verification
 
 interface AuthContextType {
   user: User | null;
@@ -13,30 +12,82 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
+  checkAuth: (showLoader?: boolean) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_CHECK_TIMEOUT_MS = 8000;
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const authCheckIdRef = useRef(0);
   const router = useRouter();
 
-  const checkAuth = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Server action now reads the HttpOnly cookie
-      const { isAuthenticated: authStatus, user: authedUser } = await verifyAuth();
+  const checkAuth = useCallback(async (showLoader = true): Promise<boolean> => {
+    const authCheckId = authCheckIdRef.current + 1;
+    authCheckIdRef.current = authCheckId;
+
+    if (showLoader) {
+      setIsLoading(true);
+    }
+
+    const finishAuthCheck = (authStatus: boolean, authedUser: User | null): boolean => {
+      if (authCheckIdRef.current !== authCheckId) {
+        return authStatus;
+      }
+
       setIsAuthenticated(authStatus);
       setUser(authedUser);
-    } catch (error) {
-      console.error("Auth check failed:", error);
-      setIsAuthenticated(false);
-      setUser(null);
-    } finally {
       setIsLoading(false);
+      return authStatus;
+    };
+
+    let timeoutId: number | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        reject(new Error('Auth verification timed out.'));
+      }, AUTH_CHECK_TIMEOUT_MS);
+    });
+
+    const sessionRequest = async () => {
+      const response = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = data?.message || `Session check failed with status ${response.status}.`;
+        throw new Error(message);
+      }
+
+      return {
+        isAuthenticated: Boolean(data?.isAuthenticated),
+        user: (data?.user as User | null) ?? null,
+      };
+    };
+
+    try {
+      const { isAuthenticated: authStatus, user: authedUser } = await Promise.race([
+        sessionRequest(),
+        timeoutPromise,
+      ]);
+
+      return finishAuthCheck(authStatus, authedUser);
+    } catch (error) {
+      console.error('Auth check failed:', error instanceof Error ? error.message : error);
+      return finishAuthCheck(false, null);
+    } finally {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     }
   }, []);
 
@@ -47,6 +98,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (username: string, password: string, rememberMe?: boolean) => {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, rememberMe }),
     });
@@ -54,26 +107,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const data = await response.json();
 
     if (response.ok && data.success) {
-      // The cookie is set by the server. We just need to update the client state.
-      setUser(data.user);
-      setIsAuthenticated(true);
-      router.push('/dashboard'); // Manually redirect after successful login
-    } else {
-      // Throw a custom error object to pass status and data to the caller
-      const error = new Error(data.message || 'Login failed.');
-      (error as any).response = response;
-      (error as any).data = data;
-      throw error;
+      await checkAuth(false);
+      window.location.assign('/dashboard');
+      return;
     }
+
+    // Throw a custom error object to pass status and data to the caller
+    const error = new Error(data.message || 'Login failed.');
+    (error as any).response = response;
+    (error as any).data = data;
+    throw error;
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/auth/sign-out', { method: 'POST' });
     } catch (error) {
       console.error("Error during logout API call:", error);
     } finally {
-      // Clear state regardless of API call success
       setUser(null);
       setIsAuthenticated(false);
       router.replace('/login');

@@ -465,12 +465,23 @@ export default function PulsaOrderPage() {
     await loadAllApiProducts(true);
   };
 
+  const themedLabelClass =
+    "flex items-center font-semibold text-[var(--ui-text)] dark:text-zinc-100";
+  const themedInputClass =
+    "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedOutlineButtonClass =
+    "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedPrimaryButtonClass =
+    "rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+  const themedInfoCardClass =
+    "rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+
 
   if (isLoadingApiProducts && allApiProducts.length === 0 && !isRefreshingPricelist) {
     return (
       <OrderFormShell title="Buy Phone Credit (Pulsa)" description="Enter phone number to find products." icon={Smartphone}>
-        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-          <Loader2 className="h-12 w-12 animate-spin mb-4" />
+        <div className="flex flex-col items-center justify-center py-10 text-[var(--ui-text-muted)] dark:text-zinc-400">
+          <Loader2 className="mb-4 h-12 w-12 animate-spin text-[var(--ui-accent)]" />
           <p className="text-lg">Loading available products from Digiflazz...</p>
         </div>
       </OrderFormShell>
@@ -480,13 +491,13 @@ export default function PulsaOrderPage() {
   if (apiProductsError && allApiProducts.length === 0 && !isLoadingApiProducts && !isRefreshingPricelist) {
     return (
       <OrderFormShell title="Buy Phone Credit (Pulsa)" description="Enter phone number to find products." icon={Smartphone}>
-        <Card className="text-center py-10 shadow border-destructive bg-destructive/10">
+        <Card className="border-destructive bg-destructive/10 py-10 text-center shadow">
             <CardContent>
-              <div className="text-destructive flex items-center justify-center gap-2 mb-2">
+              <div className="mb-2 flex items-center justify-center gap-2 text-destructive">
                     <AlertTriangle className="h-6 w-6" /> <span className="font-semibold">Error Loading Products</span>
               </div>
               <p className="text-destructive/90">{apiProductsError}</p>
-              <Button onClick={() => loadAllApiProducts(false)} className="mt-4">Try Reload</Button>
+              <Button onClick={() => loadAllApiProducts(false)} className={`mt-4 ${themedPrimaryButtonClass}`}>Try Reload</Button>
             </CardContent>
           </Card>
       </OrderFormShell>
@@ -505,8 +516,8 @@ export default function PulsaOrderPage() {
               name="phoneNumber"
               render={({ field }) => (
                 <FormItem>
-                  <Label className="flex items-center">
-                    <Smartphone className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <Label className={themedLabelClass}>
+                    <Smartphone className="mr-2 h-4 w-4 text-[var(--ui-accent)]" />
                     Phone Number
                   </Label>
                   <FormControl>
@@ -518,6 +529,7 @@ export default function PulsaOrderPage() {
                       type="tel"
                       disabled={isCheckingOperator || isRefreshingPricelist || isSubmittingWithPin}
                       maxLength={20}
+                      className={themedInputClass}
                     />
                   </FormControl>
                   <FormMessage />
@@ -528,7 +540,7 @@ export default function PulsaOrderPage() {
                 <Button
                 type="button"
                 onClick={handleCheckOperator}
-                className="w-full sm:flex-grow"
+                className={`w-full sm:flex-grow ${themedPrimaryButtonClass}`}
                 disabled={isCheckingOperator || !watchedPhoneNumber || watchedPhoneNumber.length < 4 || isRefreshingPricelist || (isLoadingApiProducts && allApiProducts.length === 0) || isSubmittingWithPin}
                 >
                 {isCheckingOperator ? (
@@ -542,7 +554,7 @@ export default function PulsaOrderPage() {
                     type="button"
                     onClick={handleRefreshPricelist}
                     variant="outline"
-                    className="w-full sm:w-auto"
+                    className={`w-full sm:w-auto ${themedOutlineButtonClass}`}
                     disabled={isRefreshingPricelist || (isLoadingApiProducts && allApiProducts.length === 0) || isSubmittingWithPin }
                 >
                     {isRefreshingPricelist ? (
@@ -564,7 +576,7 @@ export default function PulsaOrderPage() {
                 )}
 
                 {detectedOperator && !operatorCheckError && (
-                     <div className="mt-2 text-sm text-green-700 flex items-center gap-1.5 p-3 bg-green-100 border border-green-300 rounded-md">
+                     <div className="mt-2 flex items-center gap-1.5 rounded-2xl border border-green-300 bg-green-100 p-3 text-sm text-green-700">
                         <ShieldCheck className="h-5 w-5 text-green-600" />
                         Operator: <span className="font-semibold">{detectedOperator.name}</span>
                      </div>
@@ -572,26 +584,26 @@ export default function PulsaOrderPage() {
 
                 {detectedOperator && !operatorCheckError && availableProducts.length > 0 && (
                   <div className="space-y-4 pt-4">
-                    <h3 className="text-lg font-semibold">Select Product for {detectedOperator.name}:</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto p-2 rounded-md border bg-muted/20">
+                    <h3 className="text-lg font-semibold text-[var(--ui-text)] dark:text-zinc-100">Select Product for {detectedOperator.name}:</h3>
+                    <div className="grid max-h-96 grid-cols-1 gap-3 overflow-y-auto rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-2 md:grid-cols-2 dark:border-zinc-800 dark:bg-zinc-900">
                       {availableProducts.map(product => {
                         const isActive = product.buyer_product_status && product.seller_product_status;
                         return (
                             <Card
                             key={product.buyer_sku_code}
                             onClick={() => handleProductSelect(product)}
-                            className={`bg-card transition-shadow
+                            className={`${themedInfoCardClass} transition-shadow
                                         ${isActive ? 'cursor-pointer hover:shadow-lg' : 'opacity-60 cursor-not-allowed'}
-                                        ${selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive ? 'ring-2 ring-primary border-primary' : 'border-border'}`}
+                                        ${selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive ? 'ring-2 ring-[var(--ui-accent)] border-[var(--ui-accent)]' : 'border-[var(--ui-border)]'}`}
                             >
                             <CardContent className="p-3">
                                 <div className="flex justify-between items-start">
-                                <p className="font-medium text-sm flex-grow mr-2">{product.product_name}</p>
-                                {selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive && <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0" />}
+                                <p className="mr-2 flex-grow text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100">{product.product_name}</p>
+                                {selectedProduct?.buyer_sku_code === product.buyer_sku_code && isActive && <ShieldCheck className="h-5 w-5 flex-shrink-0 text-[var(--ui-accent)]" />}
                                 </div>
-                                <p className={`font-semibold text-md ${isActive ? 'text-primary': 'text-muted-foreground'}`}>Rp {product.price.toLocaleString()}</p>
+                                <p className={`text-md font-semibold ${isActive ? 'text-[var(--ui-accent)]' : 'text-[var(--ui-text-muted)] dark:text-zinc-400'}`}>Rp {product.price.toLocaleString()}</p>
                                 <div className="mt-1.5 flex flex-wrap gap-1">
-                                    <Badge variant="outline" className="text-xs">{product.category}</Badge>
+                                    <Badge variant="outline" className="border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-xs text-[var(--ui-text)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">{product.category}</Badge>
                                     {isActive ? (
                                       <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-300">Available</Badge>
                                     ) : (
@@ -604,8 +616,8 @@ export default function PulsaOrderPage() {
                       })}
                     </div>
                      {selectedProduct && (
-                        <div className="p-3 bg-primary/10 rounded-md mt-2 border border-primary/30 text-center">
-                            <p className="font-semibold text-primary">Selected: {selectedProduct.product_name} (Modal: Rp {selectedProduct.price.toLocaleString()})</p>
+                        <div className="mt-2 rounded-2xl border border-[var(--ui-accent)]/30 bg-[var(--ui-accent-bg)] p-3 text-center">
+                            <p className="font-semibold text-[var(--ui-accent)]">Selected: {selectedProduct.product_name} (Modal: Rp {selectedProduct.price.toLocaleString()})</p>
                              {!(selectedProduct.buyer_product_status && selectedProduct.seller_product_status) && (
                                 <p className="text-sm text-destructive">(This product is currently not available for purchase)</p>
                             )}
@@ -614,7 +626,7 @@ export default function PulsaOrderPage() {
                   </div>
                 )}
                  {isOperatorChecked && detectedOperator && !operatorCheckError && availableProducts.length === 0 && !isLoadingApiProducts && (
-                  <div className="mt-4 text-center text-muted-foreground p-4 border rounded-md bg-card">
+                  <div className="mt-4 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card)] p-4 text-center text-[var(--ui-text-muted)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
                     No pulsa products found for {detectedOperator.name} at the moment. Try refreshing or check another number.
                   </div>
                 )}
@@ -624,7 +636,7 @@ export default function PulsaOrderPage() {
             {selectedProduct && isOperatorChecked && detectedOperator && !operatorCheckError && hasActiveProductsAvailable && (
               <Button
                 type="submit"
-                className="w-full bg-accent hover:bg-accent/90 text-accent-foreground mt-6"
+                className={`mt-6 w-full ${themedPrimaryButtonClass}`}
                 disabled={isRefreshingPricelist || isSubmittingWithPin || !selectedProduct || !(selectedProduct.buyer_product_status && selectedProduct.seller_product_status)}
               >
                 <Send className="mr-2 h-4 w-4" /> Proceed to Pay
@@ -634,19 +646,19 @@ export default function PulsaOrderPage() {
         </Form>
       </OrderFormShell>
     ) : (
-      <Card className="mt-8 shadow-xl border-2 border-primary">
-        <CardHeader className="bg-primary/10">
+      <Card className="mt-8 border-2 border-[var(--ui-accent)]/25 bg-[var(--ui-card)] shadow-xl dark:border-sky-400/20 dark:bg-zinc-950">
+        <CardHeader className="bg-[var(--ui-accent-bg)]">
           <div className="flex items-center gap-3">
             {lastSubmittedOrder.status === "Sukses" ? <CheckCircle className="h-8 w-8 text-green-500" /> : lastSubmittedOrder.status === "Pending" ? <Clock className="h-8 w-8 text-yellow-500" /> : <AlertTriangle className="h-8 w-8 text-red-500" />}
-            <CardTitle className="text-xl text-primary">
+            <CardTitle className="text-xl text-[var(--ui-accent)]">
               {lastSubmittedOrder.status === "Sukses" ? "Transaction Successful" : lastSubmittedOrder.status === "Pending" ? "Transaction Pending" : "Transaction Failed"}
             </CardTitle>
           </div>
-          <CardDescription className="text-primary/80">
+          <CardDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">
             Ref ID: {lastSubmittedOrder.refId}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3 pt-6 text-[var(--ui-text)] dark:text-zinc-100">
           <p><strong>Product:</strong> {lastSubmittedOrder.productName}</p>
           <p><strong>Phone Number:</strong> {lastSubmittedOrder.phoneNumber} ({lastSubmittedOrder.operatorName})</p>
           <p><strong>Harga Jual (Estimasi):</strong> Rp {lastSubmittedOrder.sellingPrice.toLocaleString()}</p>
@@ -657,16 +669,16 @@ export default function PulsaOrderPage() {
                 </div>
             )}
           <div><strong>Status:</strong> <Badge variant={lastSubmittedOrder.status === 'Sukses' ? 'default' : lastSubmittedOrder.status === 'Gagal' ? 'destructive' : 'secondary'}  className={`${lastSubmittedOrder.status === 'Sukses' ? 'bg-green-100 text-green-800 border-green-300' : lastSubmittedOrder.status === 'Gagal' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}>{lastSubmittedOrder.status}</Badge></div>
-          {lastSubmittedOrder.message && <p className="text-sm text-muted-foreground"><strong>Message:</strong> {lastSubmittedOrder.message}</p>}
-          {lastSubmittedOrder.sn && <p><strong>Serial Number (SN):</strong> <span className="font-mono text-primary">{lastSubmittedOrder.sn}</span></p>}
-          <p className="text-xs text-muted-foreground italic">Catatan: Harga Jual dan Profit yang ditampilkan di sini adalah estimasi. Nilai final tercatat di Riwayat Transaksi.</p>
+          {lastSubmittedOrder.message && <p className="text-sm text-[var(--ui-text-muted)] dark:text-zinc-400"><strong>Message:</strong> {lastSubmittedOrder.message}</p>}
+          {lastSubmittedOrder.sn && <p><strong>Serial Number (SN):</strong> <span className="font-mono text-[var(--ui-accent)]">{lastSubmittedOrder.sn}</span></p>}
+          <p className="text-xs italic text-[var(--ui-text-muted)] dark:text-zinc-400">Catatan: Harga Jual dan Profit yang ditampilkan di sini adalah estimasi. Nilai final tercatat di Riwayat Transaksi.</p>
 
 
           <div className="flex flex-col sm:flex-row gap-3 pt-4">
-            <Button onClick={() => router.push('/transactions')} className="w-full sm:w-auto">
+            <Button onClick={() => router.push('/transactions')} className={`w-full sm:w-auto ${themedPrimaryButtonClass}`}>
               <ListChecks className="mr-2 h-4 w-4" /> View Transaction History
             </Button>
-            <Button onClick={() => setLastSubmittedOrder(null)} variant="outline" className="w-full sm:w-auto">
+            <Button onClick={() => setLastSubmittedOrder(null)} variant="outline" className={`w-full sm:w-auto ${themedOutlineButtonClass}`}>
               <Tag className="mr-2 h-4 w-4" /> Place New Order
             </Button>
           </div>
@@ -676,23 +688,23 @@ export default function PulsaOrderPage() {
 
 
       {isConfirmingOrder && selectedProduct && (
-         <AlertDialog open={isConfirmingOrder} onOpenChange={(open) => {
+        <AlertDialog open={isConfirmingOrder} onOpenChange={(open) => {
           if (!open && !isSubmittingWithPin) {
               setIsConfirmingOrder(false);
           } else if (open) {
               setIsConfirmingOrder(true);
           }
         }}>
-          <AlertDialogContent>
+          <AlertDialogContent className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
             <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <ShieldCheck className="h-6 w-6 text-primary" />
+              <AlertDialogTitle className="flex items-center gap-2 text-[var(--ui-text)] dark:text-zinc-100">
+                <ShieldCheck className="h-6 w-6 text-[var(--ui-accent)]" />
                 Confirm Your Order
               </AlertDialogTitle>
-              <AlertDialogDescription className="pt-2 text-sm text-foreground">
+              <AlertDialogDescription className="pt-2 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
                 Please review your order details and enter PIN to confirm:
               </AlertDialogDescription>
-              <div className="pt-2 space-y-1 text-sm text-foreground">
+              <div className="space-y-1 pt-2 text-sm text-[var(--ui-text)] dark:text-zinc-100">
                 <div><strong>Phone Number:</strong> {form.getValues("phoneNumber")}</div>
                 {detectedOperator && <div><strong>Operator:</strong> {detectedOperator.name}</div>}
                 <div><strong>Product:</strong> {selectedProduct.product_name}</div>
@@ -700,8 +712,8 @@ export default function PulsaOrderPage() {
               </div>
             </AlertDialogHeader>
 
-            <div className="space-y-2 py-4 bg-muted/70 rounded-lg p-4 my-4">
-              <Label htmlFor="pinInputPulsa" className="flex items-center justify-center text-sm font-medium text-foreground/80">
+            <div className="my-4 space-y-2 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <Label htmlFor="pinInputPulsa" className="flex items-center justify-center text-sm font-medium text-[var(--ui-text-muted)] dark:text-zinc-400">
                 <KeyRound className="mr-2 h-4 w-4" />
                 Transaction PIN
               </Label>
@@ -718,16 +730,16 @@ export default function PulsaOrderPage() {
                 }}
                 placeholder="● ● ● ● ● ●"
                 maxLength={6}
-                className="text-center tracking-[0.5em] text-xl bg-background border-primary/50 focus:border-primary"
+                className="rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-center text-xl tracking-[0.5em] text-[var(--ui-text)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               />
               {pinError && <p className="text-sm text-destructive text-center pt-2">{pinError}</p>}
             </div>
 
             <AlertDialogFooter className="pt-2">
-                <AlertDialogCancel onClick={() => {setIsConfirmingOrder(false); setPinInput(""); setPinError("");}} disabled={isSubmittingWithPin}>
+                <AlertDialogCancel onClick={() => {setIsConfirmingOrder(false); setPinInput(""); setPinError("");}} disabled={isSubmittingWithPin} className={themedOutlineButtonClass}>
                     Cancel
                 </AlertDialogCancel>
-                <Button onClick={handlePinConfirm} disabled={isSubmittingWithPin || pinInput.length !== 6} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button onClick={handlePinConfirm} disabled={isSubmittingWithPin || pinInput.length !== 6} className={themedPrimaryButtonClass}>
                 {isSubmittingWithPin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirm & Pay
                 </Button>

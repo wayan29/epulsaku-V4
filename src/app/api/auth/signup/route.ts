@@ -1,6 +1,7 @@
 // src/app/api/auth/signup/route.ts
 import { NextResponse } from 'next/server';
 import { createUser } from '@/lib/user-utils';
+import { syncLegacyCredentialsOnSignup } from '@/lib/better-auth-bridge';
 import { z } from 'zod';
 
 const SignupSchema = z.object({
@@ -32,7 +33,13 @@ export async function POST(req: Request) {
     });
 
     if (result.success) {
-      // Don't set a cookie on signup, force them to log in.
+      await syncLegacyCredentialsOnSignup({
+        username,
+        email,
+        passwordPlain: password,
+        role: result.user?.role || 'super_admin',
+        permissions: result.user?.permissions || ['all_access'],
+      });
       return NextResponse.json({ success: true, user: result.user });
     } else {
       return NextResponse.json({ message: result.message || "Could not create account." }, { status: 409 }); // 409 Conflict for existing user

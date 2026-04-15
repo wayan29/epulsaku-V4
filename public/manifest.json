@@ -4,8 +4,8 @@
   "description": "Aplikasi untuk transaksi pulsa, token listrik, top-up game, dan produk digital lainnya.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#4338ca",
+  "background_color": "#FDFBF7",
+  "theme_color": "#D35400",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",

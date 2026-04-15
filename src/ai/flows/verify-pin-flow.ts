@@ -41,13 +41,13 @@ const verifyPinFlow = ai.defineFlow(
     const user = await getUserByUsername(input.username);
 
     if (!user) {
-      return { isValid: false, message: 'User not found.' };
+      return { isValid: false, message: 'User not found.', accountDisabled: false };
     }
      if (user.isDisabled) {
-      return { isValid: false, message: 'Your account is disabled. Please contact an administrator.' };
+      return { isValid: false, message: 'Your account is disabled. Please contact an administrator.', accountDisabled: true };
     }
     if (!user.hashedPin) {
-      return { isValid: false, message: 'User does not have a PIN configured.' };
+      return { isValid: false, message: 'User does not have a PIN configured.', accountDisabled: false };
     }
 
     const isPinValid = await verifyUserPin(input.pin, user.hashedPin);
@@ -57,13 +57,13 @@ const verifyPinFlow = ai.defineFlow(
       if (user.failedPinAttempts && user.failedPinAttempts > 0) {
         await resetUserFailedPinAttempts(user._id);
       }
-      return { isValid: true, message: 'PIN verified successfully.' };
+      return { isValid: true, message: 'PIN verified successfully.', accountDisabled: false };
     } else {
       // PIN is incorrect, handle failure logic
       
       // super_admin is immune to PIN lockouts
       if (user.role === 'super_admin') {
-        return { isValid: false, message: 'Invalid PIN.' };
+        return { isValid: false, message: 'Invalid PIN.', accountDisabled: false };
       }
 
       const newAttemptCount = await updateUserFailedPinAttempts(user._id);
@@ -92,7 +92,7 @@ const verifyPinFlow = ai.defineFlow(
         };
       } else {
         const attemptsRemaining = MAX_ATTEMPTS - newAttemptCount;
-        return { isValid: false, message: `Invalid PIN. You have ${attemptsRemaining} attempt(s) remaining before your account is locked.` };
+        return { isValid: false, message: `Invalid PIN. You have ${attemptsRemaining} attempt(s) remaining before your account is locked.`, accountDisabled: false };
       }
     }
   }

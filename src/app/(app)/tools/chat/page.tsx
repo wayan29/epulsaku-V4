@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { Loader2, Send, Bot, User, BrainCircuit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { chatWithGemini, type ChatInput } from '@/ai/flows/chat-flow';
@@ -90,12 +90,12 @@ export default function ChatPage() {
 
   return (
     <ProtectedRoute requiredPermission="chat_ai">
-        <CardContent>
-        <div className="flex flex-col h-[70vh] bg-background">
-            <div className="p-4 border-b">
-                 <Label htmlFor="model-select">AI Model</Label>
+        <CardContent className="px-6 pb-6 sm:px-8 sm:pb-8">
+        <div className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card)] dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="border-b border-[var(--ui-border)] p-4 dark:border-zinc-800">
+                 <Label htmlFor="model-select" className="text-[var(--ui-text)] dark:text-zinc-100">AI Model</Label>
                  <Select value={selectedModel} onValueChange={setSelectedModel} disabled={isLoading}>
-                    <SelectTrigger id="model-select">
+                    <SelectTrigger id="model-select" className="mt-2 rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
                         <SelectValue placeholder="Select a model" />
                     </SelectTrigger>
                     <SelectContent>
@@ -107,11 +107,11 @@ export default function ChatPage() {
                     </SelectContent>
                  </Select>
             </div>
-            <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div ref={scrollAreaRef} className="flex-1 space-y-4 overflow-y-auto bg-[var(--ui-surface)] p-4 dark:bg-zinc-950/50">
             {messages.length === 0 && (
                 <div className="flex justify-center items-center h-full">
-                    <div className="text-center text-muted-foreground">
-                        <BrainCircuit size={48} className="mx-auto" />
+                    <div className="text-center text-[var(--ui-text-muted)] dark:text-zinc-400">
+                        <BrainCircuit size={48} className="mx-auto text-[var(--ui-accent)]" />
                         <p className="mt-2">Mulai percakapan dengan ePulsaku AI</p>
                         <p className="text-xs mt-1">Menggunakan {availableModels.find(m => m.value === selectedModel)?.label || 'AI Model'}</p>
                     </div>
@@ -125,21 +125,21 @@ export default function ChatPage() {
                 }`}
                 >
                 {message.role === 'model' && (
-                    <div className="p-2 bg-primary rounded-full text-primary-foreground">
+                    <div className="rounded-full bg-[var(--ui-accent)] p-2 text-white">
                         <Bot size={20} />
                     </div>
                 )}
                 <div
-                    className={`max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-lg ${
+                    className={`max-w-xs rounded-2xl p-3 text-sm md:max-w-md lg:max-w-lg ${
                     message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
+                        ? 'bg-[var(--ui-accent)] text-white'
+                        : 'border border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'
                     }`}
                 >
                     <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                 </div>
                 {message.role === 'user' && (
-                    <div className="p-2 bg-muted rounded-full text-muted-foreground">
+                    <div className="rounded-full bg-[var(--ui-card-alt)] p-2 text-[var(--ui-text-secondary)] dark:bg-zinc-900 dark:text-zinc-400">
                         <User size={20} />
                     </div>
                 )}
@@ -147,25 +147,25 @@ export default function ChatPage() {
             ))}
             {isLoading && (
                 <div className="flex items-start gap-3 justify-start">
-                    <div className="p-2 bg-primary rounded-full text-primary-foreground">
+                    <div className="rounded-full bg-[var(--ui-accent)] p-2 text-white">
                         <Bot size={20} />
                     </div>
-                    <div className="max-w-xs p-3 rounded-lg bg-muted flex items-center">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <div className="flex max-w-xs items-center rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                        <Loader2 className="h-5 w-5 animate-spin text-[var(--ui-text-secondary)] dark:text-zinc-400" />
                     </div>
                 </div>
             )}
             </div>
-            <div className="p-4 border-t">
+            <div className="border-t border-[var(--ui-border)] p-4 dark:border-zinc-800">
             <form onSubmit={handleSubmit} className="flex items-center gap-2">
                 <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ketik pesan Anda..."
-                className="flex-1"
+                className="flex-1 border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 disabled={isLoading}
                 />
-                <Button type="submit" disabled={isLoading || !input.trim()}>
+                <Button type="submit" className="rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]" disabled={isLoading || !input.trim()}>
                 {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (

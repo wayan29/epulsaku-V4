@@ -21,9 +21,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // but we still show a loader here while the check is happening after initial load.
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Checking session...</p>
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[var(--ui-surface)] text-[var(--ui-text)] dark:bg-zinc-950 dark:text-zinc-100">
+        <Loader2 className="h-12 w-12 animate-spin text-[var(--ui-accent)]" />
+        <p className="mt-4 text-[var(--ui-text-muted)] dark:text-zinc-400">Checking session...</p>
       </div>
     );
   }
@@ -31,12 +31,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // Only render the layout if authenticated.
   if (isAuthenticated) {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-screen flex-col bg-[var(--ui-surface)] text-[var(--ui-text)] dark:bg-zinc-950 dark:text-zinc-100">
         <Header />
-        <main className="flex-grow container mx-auto px-4 py-8">
+        <main className="container mx-auto flex-grow px-3 py-4 sm:px-4 sm:py-6 lg:py-8">
           {children}
         </main>
-        <footer className="py-6 text-center text-sm text-muted-foreground border-t">
+        <footer className="border-t border-[var(--ui-border)] py-6 text-center text-sm text-[var(--ui-text-muted)] dark:border-zinc-800 dark:text-zinc-400">
           © {new Date().getFullYear()} ePulsaku. All rights reserved.
         </footer>
       </div>

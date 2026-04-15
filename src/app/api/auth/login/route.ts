@@ -1,8 +1,9 @@
 // src/app/api/auth/login/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import { getUserByUsername, verifyUserPassword, recordLoginSuccess } from '@/lib/user-utils';
-import { generateToken, JWT_SECRET, MAX_ATTEMPTS, LOCKOUT_PERIOD_MS, type User, AUTH_COOKIE_NAME } from '@/lib/auth-utils';
-import { serialize } from 'cookie';
+import { MAX_ATTEMPTS, LOCKOUT_PERIOD_MS, normalizeUserRole, type User } from '@/lib/auth-utils';
+import { repairBetterAuthCredentialAccount, syncLegacyUserToBetterAuth } from '@/lib/better-auth-bridge';
+import { auth } from '@/lib/auth';
 import { z } from 'zod';
 
 const LoginSchema = z.object({
@@ -23,7 +24,20 @@ function getClientIp(req: NextRequest): string {
     if (forwarded) {
         return forwarded.split(',')[0].trim();
     }
-    return req.headers.get('x-real-ip') || req.ip || '127.0.0.1';
+    return req.headers.get('x-real-ip') || '127.0.0.1';
+}
+
+function getPublicOrigin(req: NextRequest): string {
+    const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+    const host = forwardedHost || req.headers.get('host');
+    const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const proto = forwardedProto || req.nextUrl.protocol.replace(':', '') || 'https';
+
+    if (host) {
+        return `${proto}://${host}`;
+    }
+
+    return req.nextUrl.origin;
 }
 
 function handleFailedLoginAttempt(ip: string) {
@@ -35,13 +49,14 @@ function handleFailedLoginAttempt(ip: string) {
     if (existingAttempt && now < existingAttempt.expiry) {
         newCount = existingAttempt.count + 1;
     }
-    
+
     // Set a new expiry time from the current moment of failure
     loginAttempts.set(ip, {
         count: newCount,
         expiry: now + LOCKOUT_PERIOD_MS
     });
 }
+
 // --- End of Rate Limiting Implementation ---
 
 
@@ -72,12 +87,6 @@ export async function POST(req: NextRequest) {
     }
     
     const { username, password, rememberMe } = parseResult.data;
-    const normalizedUsername = username.toLowerCase();
-
-    if (!JWT_SECRET) {
-      console.error("FATAL: JWT_SECRET environment variable is not set.");
-      return NextResponse.json({ message: "Server configuration error." }, { status: 500 });
-    }
 
     const userFromDb = await getUserByUsername(username);
     if (!userFromDb || !userFromDb.hashedPassword) {
@@ -104,32 +113,97 @@ export async function POST(req: NextRequest) {
     const userAgent = headersList.get('user-agent');
     await recordLoginSuccess(userFromDb, userAgent, ip);
 
-    // Generate Token
-    const userForToken: User = { id: userFromDb._id, username: userFromDb.username, role: userFromDb.role, permissions: userFromDb.permissions || [] };
-    const token = generateToken(userForToken, rememberMe);
-    const maxAge = rememberMe ? 60 * 60 * 24 * 7 : 60 * 60 * 8; // 7 days or 8 hours
+    const normalizedRole = normalizeUserRole(userFromDb.role);
+    if (!normalizedRole) {
+      return NextResponse.json({ message: 'Invalid role configuration on this account.' }, { status: 500 });
+    }
 
-    // Determine secure context for the cookie
-    const forwardedProto = headersList.get('x-forwarded-proto');
-    const urlProto = req.nextUrl?.protocol?.replace(':', '') || '';
-    const isSecure = process.env.NODE_ENV === 'production' || forwardedProto === 'https' || urlProto === 'https';
+    await syncLegacyUserToBetterAuth(userFromDb);
 
-    // Serialize and set cookie in the response header
-    const serializedCookie = serialize(AUTH_COOKIE_NAME, token, {
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: maxAge,
+    const publicOrigin = getPublicOrigin(req);
+    const publicUrl = new URL(publicOrigin);
+    const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+    const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+
+    const betterAuthRequestHeaders = new Headers({
+      'content-type': 'application/json',
+      cookie: req.headers.get('cookie') || '',
+      'user-agent': req.headers.get('user-agent') || '',
+      origin: publicOrigin,
+      referer: `${publicOrigin}/login`,
     });
-    
-    const response = NextResponse.json({ 
-      success: true, 
-      message: "Login successful.",
-      user: userForToken,
+
+    if (req.headers.get('x-forwarded-for')) {
+      betterAuthRequestHeaders.set('x-forwarded-for', req.headers.get('x-forwarded-for') || '');
+    }
+
+    if (req.headers.get('x-real-ip')) {
+      betterAuthRequestHeaders.set('x-real-ip', req.headers.get('x-real-ip') || '');
+    }
+
+    if (forwardedProto) {
+      betterAuthRequestHeaders.set('x-forwarded-proto', forwardedProto);
+    }
+
+    if (forwardedHost) {
+      betterAuthRequestHeaders.set('x-forwarded-host', forwardedHost);
+    }
+
+    betterAuthRequestHeaders.set('host', req.headers.get('host') || publicUrl.host);
+
+    const betterAuthRequest = new Request(new URL('/api/auth/sign-in/username', publicOrigin), {
+      method: 'POST',
+      headers: betterAuthRequestHeaders,
+      body: JSON.stringify({ username, password, rememberMe }),
     });
-    response.headers.set('Set-Cookie', serializedCookie);
-    
+
+    let betterAuthResponse = await auth.handler(betterAuthRequest);
+    if (!betterAuthResponse.ok && userFromDb.hashedPassword) {
+      await repairBetterAuthCredentialAccount(userFromDb.username, userFromDb.hashedPassword);
+      betterAuthResponse = await auth.handler(betterAuthRequest);
+    }
+
+    if (!betterAuthResponse.ok) {
+      const errorPayload = await betterAuthResponse.json().catch(() => ({ message: 'Login failed.' }));
+      console.error('Better Auth sign-in failed after legacy password verification.', {
+        username: userFromDb.username,
+        status: betterAuthResponse.status,
+        errorPayload,
+      });
+      handleFailedLoginAttempt(ip);
+      return NextResponse.json(
+        { message: errorPayload?.message || 'Invalid username or password.' },
+        { status: betterAuthResponse.status || 401 }
+      );
+    }
+
+    const payload = await betterAuthResponse.json().catch(() => null);
+    const response = NextResponse.json(
+      {
+        success: true,
+        message: 'Login successful.',
+        user: {
+          id: userFromDb._id,
+          username: userFromDb.username,
+          role: normalizedRole,
+          permissions: userFromDb.permissions || [],
+        } satisfies User,
+        session: payload,
+      },
+      {
+        status: betterAuthResponse.status,
+      }
+    );
+
+    const setCookieHeader = betterAuthResponse.headers.get('set-cookie');
+    if (setCookieHeader) {
+      response.headers.set('set-cookie', setCookieHeader);
+    }
+
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+
     return response;
 
   } catch (error) {

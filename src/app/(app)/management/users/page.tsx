@@ -1,7 +1,7 @@
 // src/app/(app)/management/users/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { type StoredUser, createUser, getAllUsers, deleteUser, updateUser, toggleUserStatus } from '@/lib/user-utils';
-import { ALL_APP_MENUS, type AppMenu } from '@/lib/auth-utils';
+import { ALL_APP_MENUS, hasPermission, isSuperAdminRole, normalizeUserRole } from '@/lib/auth-utils';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -34,7 +34,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -57,7 +56,7 @@ import { Label } from '@/components/ui/label';
 import ProtectedRoute from '@/components/core/ProtectedRoute';
 
 
-const roleOptions: ('staf' | 'admin')[] = ['staf', 'admin'];
+const roleOptions = ['staf', 'admin'] as const;
 
 const menuKeys = ALL_APP_MENUS.map(menu => menu.key);
 
@@ -83,6 +82,15 @@ const editUserFormSchema = baseUserFormSchema.omit({ username: true });
 
 type EditUserFormValues = z.infer<typeof editUserFormSchema>;
 
+const themedInputClass = "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+const themedSelectTriggerClass = "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] focus:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+const themedSelectContentClass = "border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+const themedDialogClass = "max-w-2xl rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] shadow-xl dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+const themedOutlineButtonClass = "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+const primaryButtonClass = "rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+const themedLabelClass = "flex items-center text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100";
+const themedIconClass = "mr-2 h-4 w-4 text-[var(--ui-text-muted)] dark:text-zinc-400";
+
 export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
   const router = useRouter();
@@ -99,6 +107,10 @@ export default function UserManagementPage() {
 
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [userToToggle, setUserToToggle] = useState<StoredUser | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'staf' | 'admin' | 'super_admin'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
+  const canManageUsers = hasPermission(currentUser, 'manajemen_pengguna');
 
   const addUserForm = useForm<AddUserFormValues>({
     resolver: zodResolver(addUserFormSchema),
@@ -132,13 +144,13 @@ export default function UserManagementPage() {
   },[toast]);
 
   useEffect(() => {
-    if (currentUser?.role === 'super_admin') {
+    if (canManageUsers) {
       fetchUsers();
     }
-  }, [currentUser, router, toast, fetchUsers]);
+  }, [canManageUsers, currentUser, router, toast, fetchUsers]);
 
   async function onAddUserSubmit(values: AddUserFormValues) {
-    if (!currentUser || currentUser.role !== 'super_admin') {
+    if (!currentUser || !canManageUsers) {
       toast({ title: "Unauthorized", description: "You are not authorized to perform this action.", variant: "destructive" });
       return;
     }
@@ -172,7 +184,7 @@ export default function UserManagementPage() {
   }
 
   async function onEditUserSubmit(values: EditUserFormValues) {
-      if (!userToEdit || !currentUser || currentUser.role !== 'super_admin') return;
+      if (!userToEdit || !currentUser || !canManageUsers) return;
 
       setIsSubmitting(true);
       try {
@@ -210,7 +222,7 @@ export default function UserManagementPage() {
   };
   
   const handleConfirmToggleStatus = async () => {
-    if (!userToToggle || !currentUser || currentUser.role !== 'super_admin') {
+    if (!userToToggle || !currentUser || !canManageUsers) {
         toast({ title: "Error", description: "Cannot perform this action.", variant: "destructive" });
         return;
     }
@@ -238,7 +250,7 @@ export default function UserManagementPage() {
       setUserToEdit(user);
       editUserForm.reset({
           email: user.email || '',
-          role: user.role as 'staf' | 'admin',
+          role: (user.role === 'admin' ? 'admin' : 'staf'),
           password: '',
           pin: '',
           telegramChatId: user.telegramChatId || '',
@@ -248,7 +260,7 @@ export default function UserManagementPage() {
   }
 
   const handleConfirmDelete = async () => {
-    if (!userToDelete || !currentUser || currentUser.role !== 'super_admin') {
+    if (!userToDelete || !currentUser || !canManageUsers) {
       toast({ title: "Error", description: "Cannot perform delete action.", variant: "destructive" });
       return;
     }
@@ -266,25 +278,41 @@ export default function UserManagementPage() {
     setUserToDelete(null);
   };
 
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesSearch = !normalizedSearch ||
+        user.username.toLowerCase().includes(normalizedSearch) ||
+        (user.email || '').toLowerCase().includes(normalizedSearch) ||
+        (user.telegramChatId || '').toLowerCase().includes(normalizedSearch);
+
+      const matchesRole = roleFilter === 'all' || normalizeUserRole(user.role) === roleFilter;
+      const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? !user.isDisabled : !!user.isDisabled);
+
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, searchTerm, roleFilter, statusFilter]);
+
   const renderPermissionsSelector = (formInstance: any) => (
-     <div className="col-span-1 md:col-span-2 space-y-3">
-        <FormLabel className="font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4"/>Menu Permissions</FormLabel>
+     <div className="col-span-1 space-y-3 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 md:col-span-2 dark:border-zinc-800 dark:bg-zinc-900/60">
+        <FormLabel className="flex items-center gap-2 font-semibold text-[var(--ui-text)] dark:text-zinc-100"><ShieldCheck className="h-4 w-4 text-[var(--ui-accent)]"/>Menu Permissions</FormLabel>
         <Controller
             name="permissions"
             control={formInstance.control}
             render={({ field }) => (
                 <>
-                <div className="flex items-center space-x-2 p-2 rounded-md bg-muted/50 border">
+                <div className="flex items-center space-x-2 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-3 dark:border-zinc-800 dark:bg-zinc-900">
                     <Checkbox
                         id="select-all"
                         onCheckedChange={(checked) => field.onChange(checked ? menuKeys : [])}
                         checked={field.value?.length === menuKeys.length}
                     />
-                    <Label htmlFor="select-all" className="font-semibold text-sm">Select All Menus</Label>
+                    <Label htmlFor="select-all" className="text-sm font-semibold text-[var(--ui-text)] dark:text-zinc-100">Select All Menus</Label>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2 border rounded-md">
+                <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-xl border border-[var(--ui-border)] bg-[var(--ui-card)] p-2 sm:grid-cols-2 lg:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-950">
                     {ALL_APP_MENUS.filter(menu => menu.key !== 'manajemen_pengguna').map((menu) => (
-                    <FormItem key={menu.key} className="flex flex-row items-start space-x-3 space-y-0 p-3 rounded-lg hover:bg-accent/50">
+                    <FormItem key={menu.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-transparent p-3 hover:border-[var(--ui-accent)]/20 hover:bg-[var(--ui-accent-bg)]">
                         <FormControl>
                         <Checkbox
                             checked={field.value?.includes(menu.key)}
@@ -296,8 +324,8 @@ export default function UserManagementPage() {
                         />
                         </FormControl>
                         <div className="space-y-1 leading-none">
-                            <FormLabel className="font-medium cursor-pointer">{menu.label}</FormLabel>
-                            <p className="text-xs text-muted-foreground">{menu.description}</p>
+                            <FormLabel className="cursor-pointer font-medium text-[var(--ui-text)] dark:text-zinc-100">{menu.label}</FormLabel>
+                            <p className="text-xs text-[var(--ui-text-muted)] dark:text-zinc-400">{menu.description}</p>
                         </div>
                     </FormItem>
                     ))}
@@ -311,88 +339,188 @@ export default function UserManagementPage() {
 
   return (
     <ProtectedRoute requiredPermission='manajemen_pengguna'>
-    <div className="space-y-8">
-      <div className="flex items-center gap-3 mb-2">
-        <UserCog className="h-8 w-8 text-primary" />
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-headline">User Management</h1>
-          <p className="text-muted-foreground">Add, edit, or remove 'admin' or 'staf' users and manage their permissions.</p>
+    <div className="mx-auto max-w-7xl space-y-8 pb-10">
+      <div className="mb-2 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--ui-accent-gradient-from)] to-[var(--ui-accent-gradient-to)] text-white shadow-lg">
+            <UserCog className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold font-headline tracking-tight text-[var(--ui-text)] dark:text-zinc-100">User Management</h1>
+            <p className="text-[var(--ui-text-muted)] dark:text-zinc-400">Add, edit, or remove admin or staf users and manage their permissions.</p>
+          </div>
         </div>
-      </div>
-
-      <Dialog>
-        <DialogTrigger asChild>
-            <Button><UserPlus className="mr-2 h-4 w-4"/> Add New User</Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-2xl">
-            <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
-            <DialogDescription>Create a new account and set their permissions. PIN and Telegram Chat ID are optional.</DialogDescription>
-            </DialogHeader>
-            <Form {...addUserForm}>
-            <form onSubmit={addUserForm.handleSubmit(onAddUserSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={addUserForm.control} name="username" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><UserCircle2 className="mr-2 h-4 w-4 text-muted-foreground"/>Username</FormLabel><FormControl><Input placeholder="e.g., jane.doe" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={addUserForm.control} name="email" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><Mail className="mr-2 h-4 w-4 text-muted-foreground"/>Email (Optional)</FormLabel><FormControl><Input placeholder="user@example.com" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={addUserForm.control} name="password" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><Lock className="mr-2 h-4 w-4 text-muted-foreground"/>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={addUserForm.control} name="pin" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><KeyRound className="mr-2 h-4 w-4 text-muted-foreground"/>6-Digit PIN (Optional)</FormLabel><FormControl><Input type="password" placeholder="●●●●●●" {...field} maxLength={6} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={addUserForm.control} name="role" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><ShieldAlert className="mr-2 h-4 w-4 text-muted-foreground"/>Role</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}><FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl><SelectContent>{roleOptions.map(role => (<SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
-                <FormField control={addUserForm.control} name="telegramChatId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><Send className="mr-2 h-4 w-4 text-muted-foreground"/>Telegram Chat ID (Optional)</FormLabel><FormControl><Input placeholder="e.g., 123456789" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                {renderPermissionsSelector(addUserForm)}
-                 <div className="col-span-1 md:col-span-2 pt-4 border-t">
-                    <FormField
+        <Dialog>
+          <DialogTrigger asChild>
+              <Button className={`w-full sm:w-auto ${primaryButtonClass}`}><UserPlus className="mr-2 h-4 w-4"/> Add New User</Button>
+          </DialogTrigger>
+          <DialogContent className={themedDialogClass}>
+              <DialogHeader>
+              <DialogTitle className="text-[var(--ui-text)] dark:text-zinc-100">Add New User</DialogTitle>
+              <DialogDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">Create a new account and set their permissions. PIN and Telegram Chat ID are optional.</DialogDescription>
+              </DialogHeader>
+              <Form {...addUserForm}>
+              <form onSubmit={addUserForm.handleSubmit(onAddUserSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
                     control={addUserForm.control}
-                    name="adminPasswordConfirmation"
+                    name="username"
                     render={({ field }) => (
-                        <FormItem>
-                        <FormLabel className="flex items-center text-md font-semibold text-destructive"><Lock className="mr-2 h-5 w-5 text-destructive" />Confirm with Your Password</FormLabel>
-                        <FormControl>
-                            <Input type="password" placeholder="Enter your super admin password" {...field} disabled={isSubmitting} className="border-destructive focus:border-destructive" />
-                        </FormControl>
+                      <FormItem>
+                        <FormLabel className={themedLabelClass}><UserCircle2 className={themedIconClass}/>Username</FormLabel>
+                        <FormControl><Input placeholder="e.g., jane.doe" {...field} disabled={isSubmitting} className={themedInputClass} /></FormControl>
                         <FormMessage />
-                        </FormItem>
+                      </FormItem>
                     )}
-                    />
+                  />
+                  <FormField
+                    control={addUserForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={themedLabelClass}><Mail className={themedIconClass}/>Email (Optional)</FormLabel>
+                        <FormControl><Input placeholder="user@example.com" {...field} disabled={isSubmitting} className={themedInputClass} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addUserForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={themedLabelClass}><Lock className={themedIconClass}/>Password</FormLabel>
+                        <FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} className={themedInputClass} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addUserForm.control}
+                    name="pin"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={themedLabelClass}><KeyRound className={themedIconClass}/>6-Digit PIN (Optional)</FormLabel>
+                        <FormControl><Input type="password" placeholder="●●●●●●" {...field} maxLength={6} disabled={isSubmitting} className={themedInputClass} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addUserForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={themedLabelClass}><ShieldAlert className={themedIconClass}/>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                          <FormControl><SelectTrigger className={themedSelectTriggerClass}><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl>
+                          <SelectContent className={themedSelectContentClass}>{roleOptions.map(role => (<SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>))}</SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addUserForm.control}
+                    name="telegramChatId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={themedLabelClass}><Send className={themedIconClass}/>Telegram Chat ID (Optional)</FormLabel>
+                        <FormControl><Input placeholder="e.g., 123456789" {...field} disabled={isSubmitting} className={themedInputClass} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {renderPermissionsSelector(addUserForm)}
+                   <div className="col-span-1 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 md:col-span-2 dark:border-amber-400/20 dark:bg-amber-500/10">
+                      <FormField
+                      control={addUserForm.control}
+                      name="adminPasswordConfirmation"
+                      render={({ field }) => (
+                          <FormItem>
+                          <FormLabel className="flex items-center text-md font-semibold text-amber-700 dark:text-amber-300"><Lock className="mr-2 h-5 w-5 text-amber-600 dark:text-amber-300" />Confirm with Your Password</FormLabel>
+                          <FormControl>
+                              <Input type="password" placeholder="Enter your super admin password" {...field} disabled={isSubmitting} className={`${themedInputClass} mt-2 border-amber-500/40 focus-visible:ring-amber-500 dark:border-amber-400/30`} />
+                          </FormControl>
+                          <FormMessage />
+                          </FormItem>
+                      )}
+                      />
+                  </div>
                 </div>
-              </div>
-              <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
-                <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4"/>}Create User</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+                <DialogFooter>
+                  <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting} className={themedOutlineButtonClass}>Cancel</Button></DialogClose>
+                  <Button type="submit" disabled={isSubmitting} className={primaryButtonClass}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4"/>}Create User</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </div>
       
-      <Card>
+      <Card className="rounded-3xl border-[var(--ui-border)] bg-[var(--ui-card)] shadow-md dark:border-zinc-800 dark:bg-zinc-950">
         <CardHeader>
-          <CardTitle>Existing Users</CardTitle>
-          <CardDescription>List of all users in the system.</CardDescription>
+          <CardTitle className="text-[var(--ui-text)] dark:text-zinc-100">Existing Users</CardTitle>
+          <CardDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">List of all users in the system.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search username, email, or Telegram Chat ID"
+              className={themedInputClass}
+            />
+            <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as 'all' | 'staf' | 'admin' | 'super_admin')}>
+              <SelectTrigger className={themedSelectTriggerClass}>
+                <SelectValue placeholder="Filter by role" />
+              </SelectTrigger>
+              <SelectContent className={themedSelectContentClass}>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="super_admin">Super Admin</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="staf">Staf</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'active' | 'disabled')}>
+              <SelectTrigger className={themedSelectTriggerClass}>
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent className={themedSelectContentClass}>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
            {isLoadingUsers ? (
-             <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>
+             <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-[var(--ui-accent)]"/></div>
            ) : (
-            <div className="overflow-x-auto">
-                <Table>
-                <TableHeader>
-                    <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Telegram Chat ID</TableHead>
-                    <TableHead>Created By</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+            <>
+            <div className="overflow-x-auto rounded-2xl border border-[var(--ui-border)] dark:border-zinc-800">
+                <Table className="text-[var(--ui-text)] dark:text-zinc-100">
+                <TableHeader className="[&_tr]:border-[var(--ui-border)] dark:[&_tr]:border-zinc-800">
+                    <TableRow className="bg-[var(--ui-card-alt)] hover:bg-[var(--ui-card-alt)] dark:bg-zinc-900 dark:hover:bg-zinc-900">
+                    <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Username</TableHead>
+                    <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Email</TableHead>
+                    <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Role</TableHead>
+                    <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Status</TableHead>
+                    <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Telegram Chat ID</TableHead>
+                    <TableHead className="text-[var(--ui-text-muted)] dark:text-zinc-400">Created By</TableHead>
+                    <TableHead className="text-right text-[var(--ui-text-muted)] dark:text-zinc-400">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {users.map((user) => (
-                    <TableRow key={user._id}>
+                    {filteredUsers.map((user) => {
+                      const isCurrentUser = currentUser?.id === user._id;
+                      return (
+                    <TableRow key={user._id} className="border-[var(--ui-border)] hover:bg-[var(--ui-accent-bg)] dark:border-zinc-800 dark:hover:bg-zinc-900/70">
                         <TableCell className="font-medium">{user.username}</TableCell>
-                        <TableCell>{user.email || 'N/A'}</TableCell>
+                        <TableCell className="text-[var(--ui-text-muted)] dark:text-zinc-400">{user.email || 'N/A'}</TableCell>
                         <TableCell>
-                          <Badge variant={user.role === 'super_admin' ? 'destructive' : user.role === 'admin' ? 'secondary' : 'default'} className="capitalize">{user.role.replace('_', ' ')}</Badge>
+                          <Badge variant={isSuperAdminRole(user.role) ? 'destructive' : normalizeUserRole(user.role) === 'admin' ? 'secondary' : 'default'} className="capitalize">
+                            {(normalizeUserRole(user.role) || user.role).replace('_', ' ')}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant={user.isDisabled ? 'destructive' : 'default'} className={user.isDisabled ? 'bg-red-100 text-red-800 border-red-300' : 'bg-green-100 text-green-800 border-green-300'}>
@@ -400,29 +528,37 @@ export default function UserManagementPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{user.telegramChatId || 'N/A'}</TableCell>
-                        <TableCell>{user.createdBy || 'N/A'}</TableCell>
+                        <TableCell className="text-[var(--ui-text-muted)] dark:text-zinc-400">{user.createdBy || 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                             <Button variant="ghost" size="icon" onClick={() => handleToggleStatusClick(user)} disabled={user.role === 'super_admin'} title={user.isDisabled ? 'Enable User' : 'Disable User'}>
+                             <Button variant="ghost" size="icon" onClick={() => handleToggleStatusClick(user)} disabled={isSuperAdminRole(user.role) || isCurrentUser} title={isCurrentUser ? 'You cannot change your own status here' : user.isDisabled ? 'Enable User' : 'Disable User'} className="text-[var(--ui-text-muted)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-400">
                                 {user.isDisabled ? <Power className="h-4 w-4 text-green-600"/> : <PowerOff className="h-4 w-4 text-yellow-600" />}
                              </Button>
-                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)} disabled={user.role === 'super_admin'}>
+                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)} disabled={isSuperAdminRole(user.role) || isCurrentUser} title={isCurrentUser ? 'Edit your own account from Account settings' : 'Edit user'} className="text-[var(--ui-text-muted)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-400">
                               <Edit className="h-4 w-4"/>
                             </Button>
                              <AlertDialog onOpenChange={(open) => { if (!open) setUserToDelete(null); }}>
                                 <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(user)} disabled={user.role === 'super_admin'}>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(user)} disabled={isSuperAdminRole(user.role) || isCurrentUser} title={isCurrentUser ? 'You cannot delete your own account here' : 'Delete user'} className="text-[var(--ui-text-muted)] hover:bg-destructive/10 hover:text-destructive dark:text-zinc-400">
                                         <Trash2 className="h-4 w-4 text-destructive"/>
                                     </Button>
                                 </AlertDialogTrigger>
                                 {userToDelete && userToDelete._id === user._id && (
-                                    <AlertDialogContent>
+                                    <AlertDialogContent className={themedDialogClass}>
                                     <AlertDialogHeader>
                                         <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-destructive" />Confirm Deletion</AlertDialogTitle>
-                                        <AlertDialogDescription>Are you sure you want to delete user '{userToDelete?.username}'? This action cannot be undone.</AlertDialogDescription>
+                                        <AlertDialogDescription className="space-y-2 text-[var(--ui-text-muted)] dark:text-zinc-400">
+                                          <p>Are you sure you want to delete this user? This action cannot be undone.</p>
+                                          <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-3 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                                            <p><strong>Username:</strong> {userToDelete?.username}</p>
+                                            <p><strong>Email:</strong> {userToDelete?.email || 'N/A'}</p>
+                                            <p><strong>Role:</strong> {(normalizeUserRole(userToDelete?.role) || userToDelete?.role || 'N/A').replace('_', ' ')}</p>
+                                            <p><strong>Status:</strong> {userToDelete?.isDisabled ? 'Disabled' : 'Active'}</p>
+                                          </div>
+                                        </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel disabled={isDeleting} className={themedOutlineButtonClass}>Cancel</AlertDialogCancel>
                                         <Button variant="destructive" onClick={handleConfirmDelete} disabled={isDeleting}>
                                         {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                         Delete User
@@ -434,33 +570,40 @@ export default function UserManagementPage() {
                           </div>
                         </TableCell>
                     </TableRow>
-                    ))}
+                      );
+                    })}
                 </TableBody>
                 </Table>
             </div>
+            {filteredUsers.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[var(--ui-border)] p-6 text-center text-[var(--ui-text-muted)] dark:border-zinc-800 dark:text-zinc-400">
+                No users match the current search/filter.
+              </div>
+            )}
+            </>
            )}
         </CardContent>
       </Card>
       
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className={themedDialogClass}>
             <DialogHeader>
-                <DialogTitle>Edit User: {userToEdit?.username}</DialogTitle>
-                <DialogDescription>Update user details and permissions. Leave password or PIN fields blank to keep them unchanged.</DialogDescription>
+                <DialogTitle className="text-[var(--ui-text)] dark:text-zinc-100">Edit User: {userToEdit?.username}</DialogTitle>
+                <DialogDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">Update user details and permissions. Leave password or PIN fields blank to keep them unchanged.</DialogDescription>
             </DialogHeader>
             <Form {...editUserForm}>
                 <form onSubmit={editUserForm.handleSubmit(onEditUserSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField control={editUserForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={editUserForm.control} name="role" render={({ field }) => (<FormItem><FormLabel>Role</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{roleOptions.map(role => (<SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                        <FormField control={editUserForm.control} name="telegramChatId" render={({ field }) => (<FormItem><FormLabel>Telegram Chat ID (Optional)</FormLabel><FormControl><Input {...field} placeholder="e.g. 123456789" disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={editUserForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>New Password (Optional)</FormLabel><FormControl><Input type="password" {...field} placeholder="Leave blank to keep current password" disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={editUserForm.control} name="pin" render={({ field }) => (<FormItem><FormLabel>New PIN (Optional)</FormLabel><FormControl><Input type="password" {...field} placeholder="Leave blank to keep current PIN" maxLength={6} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <FormField control={editUserForm.control} name="email" render={({ field }) => (<FormItem><FormLabel className={themedLabelClass}><Mail className={themedIconClass}/>Email</FormLabel><FormControl><Input {...field} disabled={isSubmitting} className={themedInputClass} /></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={editUserForm.control} name="role" render={({ field }) => (<FormItem><FormLabel className={themedLabelClass}><ShieldAlert className={themedIconClass}/>Role</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}><FormControl><SelectTrigger className={themedSelectTriggerClass}><SelectValue /></SelectTrigger></FormControl><SelectContent className={themedSelectContentClass}>{roleOptions.map(role => (<SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                        <FormField control={editUserForm.control} name="telegramChatId" render={({ field }) => (<FormItem><FormLabel className={themedLabelClass}><Send className={themedIconClass}/>Telegram Chat ID (Optional)</FormLabel><FormControl><Input {...field} placeholder="e.g. 123456789" disabled={isSubmitting} className={themedInputClass} /></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={editUserForm.control} name="password" render={({ field }) => (<FormItem><FormLabel className={themedLabelClass}><Lock className={themedIconClass}/>New Password (Optional)</FormLabel><FormControl><Input type="password" {...field} placeholder="Leave blank to keep current password" disabled={isSubmitting} className={themedInputClass} /></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={editUserForm.control} name="pin" render={({ field }) => (<FormItem><FormLabel className={themedLabelClass}><KeyRound className={themedIconClass}/>New PIN (Optional)</FormLabel><FormControl><Input type="password" {...field} placeholder="Leave blank to keep current PIN" maxLength={6} disabled={isSubmitting} className={themedInputClass} /></FormControl><FormMessage /></FormItem>)}/>
                         {renderPermissionsSelector(editUserForm)}
                     </div>
                     <DialogFooter>
-                        <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
-                        <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Save Changes</Button>
+                        <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting} className={themedOutlineButtonClass}>Cancel</Button></DialogClose>
+                        <Button type="submit" disabled={isSubmitting} className={primaryButtonClass}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Save Changes</Button>
                     </DialogFooter>
                 </form>
             </Form>
@@ -468,14 +611,22 @@ export default function UserManagementPage() {
       </Dialog>
       
       <AlertDialog open={!!userToToggle} onOpenChange={(open) => { if(!open) setUserToToggle(null)}}>
-        <AlertDialogContent>
+        <AlertDialogContent className={themedDialogClass}>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-yellow-500" />Confirm Status Change</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to {userToToggle?.isDisabled ? 'enable' : 'disable'} the user '{userToToggle?.username}'? {userToToggle && !userToToggle.isDisabled && " They will be logged out and unable to log in."}</AlertDialogDescription>
+            <AlertDialogDescription className="space-y-2 text-[var(--ui-text-muted)] dark:text-zinc-400">
+              <p>Are you sure you want to {userToToggle?.isDisabled ? 'enable' : 'disable'} this user?{userToToggle && !userToToggle.isDisabled && ' They will be logged out and unable to log in.'}</p>
+              <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-3 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <p><strong>Username:</strong> {userToToggle?.username}</p>
+                <p><strong>Email:</strong> {userToToggle?.email || 'N/A'}</p>
+                <p><strong>Role:</strong> {(normalizeUserRole(userToToggle?.role) || userToToggle?.role || 'N/A').replace('_', ' ')}</p>
+                <p><strong>Status:</strong> {userToToggle?.isDisabled ? 'Disabled' : 'Active'}</p>
+              </div>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isTogglingStatus}>Cancel</AlertDialogCancel>
-            <Button variant={userToToggle?.isDisabled ? 'default' : 'destructive'} onClick={handleConfirmToggleStatus} disabled={isTogglingStatus}>{isTogglingStatus && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{userToToggle?.isDisabled ? 'Enable' : 'Disable'} User</Button>
+            <AlertDialogCancel disabled={isTogglingStatus} className={themedOutlineButtonClass}>Cancel</AlertDialogCancel>
+            <Button variant={userToToggle?.isDisabled ? 'default' : 'destructive'} onClick={handleConfirmToggleStatus} disabled={isTogglingStatus} className={userToToggle?.isDisabled ? primaryButtonClass : undefined}>{isTogglingStatus && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{userToToggle?.isDisabled ? 'Enable' : 'Disable'} User</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

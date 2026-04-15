@@ -39,7 +39,7 @@ const purchaseTokoVoucherProductFlow = ai.defineFlow(
     inputSchema: PurchaseTokoVoucherProductInputSchema,
     outputSchema: PurchaseTokoVoucherProductOutputSchema,
   },
-  async (input) => {
+  async (input): Promise<PurchaseTokoVoucherProductOutput> => {
     const adminSettings = await getAdminSettingsFromDB();
     const memberCode = adminSettings.tokovoucherMemberCode;
     const secretKey = adminSettings.tokovoucherKey; // This is the 'secret'
@@ -62,9 +62,14 @@ const purchaseTokoVoucherProductFlow = ai.defineFlow(
       const responseData = await response.json();
 
       if (responseData.status && (responseData.status === 'sukses' || responseData.status === 'pending')) {
+        const normalizedStatus: PurchaseTokoVoucherProductOutput['status'] =
+          responseData.status === 'sukses' || responseData.status === 'pending'
+            ? responseData.status
+            : 'error';
+
         return {
           isSuccess: true,
-          status: responseData.status,
+          status: normalizedStatus,
           trxId: responseData.trx_id,
           sn: responseData.sn || responseData.token || undefined, // TokoVoucher might use 'token' for SN
           message: responseData.message || 'Transaction submitted.',

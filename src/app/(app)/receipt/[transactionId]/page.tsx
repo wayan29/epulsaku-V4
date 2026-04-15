@@ -1,7 +1,7 @@
 // src/app/(app)/receipt/[transactionId]/page.tsx
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getTransactionByIdFromDB } from '@/lib/transaction-utils'; 
 import type { Transaction } from '@/components/transactions/TransactionItem';
@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Printer, CheckCircle2, XCircle, Loader2, Info, Share2, DollarSign } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle2, XCircle, Loader2, Info, Share2 } from 'lucide-react';
 import { productIconsMapping } from '@/components/transactions/TransactionItem';
 import html2canvas from 'html2canvas';
 import { useToast } from '@/hooks/use-toast';
@@ -37,23 +37,18 @@ export default function ReceiptPage() {
   const [selectedPaperSize, setSelectedPaperSize] = useState<PaperSize>("a4");
   const [isLoading, setIsLoading] = useState(true);
   const [formattedDate, setFormattedDate] = useState<string>('');
-  const [formattedExpiryDate, setFormattedExpiryDate] = useState<string>('');
 
   const [customSellingPrice, setCustomSellingPrice] = useState<number>(0);
-
-  const effectiveSellingPrice = useMemo(() => {
-    if (transaction) {
-      return getEffectiveSellingPrice(transaction.buyerSkuCode, transaction.provider, transaction.costPrice);
-    }
-    return 0;
-  }, [transaction]);
   
-  const profit = useMemo(() => {
-    if (transaction) {
-      return customSellingPrice - transaction.costPrice;
-    }
-    return 0;
-  }, [transaction, customSellingPrice]);
+  const themedPageCardClass =
+    "border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+  const themedMutedTextClass = "text-[var(--ui-text-muted)] dark:text-zinc-400";
+  const themedOutlineButtonClass =
+    "rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100";
+  const themedPrimaryButtonClass =
+    "rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+  const themedInputClass =
+    "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
 
 
   useEffect(() => {
@@ -76,9 +71,6 @@ export default function ReceiptPage() {
       setFormattedDate(formatDateInTimezone(transaction.timestamp));
       const price = getEffectiveSellingPrice(transaction.buyerSkuCode, transaction.provider, transaction.costPrice);
       setCustomSellingPrice(price);
-    }
-    if (transaction && (transaction as any).expired_at) {
-      setFormattedExpiryDate(formatDateInTimezone((transaction as any).expired_at, "medium"));
     }
   }, [transaction]);
 
@@ -110,19 +102,18 @@ export default function ReceiptPage() {
             .no-print-in-new-window { display: none !important; }
             .receipt-price-input { display: none !important; }
             .receipt-price-display { display: block !important; }
+            .receipt-accent-text { color: var(--ui-accent, #8000FF) !important; }
+            .receipt-success-text { color: #16A34A !important; }
+            .receipt-header-surface, .receipt-accent-surface { background-color: var(--ui-accent-bg, rgba(128, 0, 255, 0.08)) !important; }
+            .receipt-muted-surface { background-color: var(--ui-card-alt, #F0E6FF) !important; }
+            .receipt-accent-border { border-color: color-mix(in srgb, var(--ui-accent, #8000FF) 25%, transparent) !important; }
+            .receipt-muted-text { color: var(--ui-text-muted, #6b7280) !important; }
             @media print {
               body { margin:0; padding:0; background-color: white !important; color: black !important; }
               .no-print-in-new-window { display: none !important; }
               .receipt-container { margin: 0 !important; padding: 0 !important; width: 100%; box-sizing: border-box; }
               
               .print-a4 .receipt-container { width: 190mm; padding: 10mm; margin: auto;}
-              .print-a4 .text-primary { color: #8000FF !important; }
-              .print-a4 .text-green-500 { color: #22C55E !important; }
-              .print-a4 .text-green-600 { color: #16A34A !important; }
-              .print-a4 .text-green-700 { color: #15803d !important; }
-              .print-a4 .bg-primary\\/5 { background-color: rgba(128, 0, 255, 0.05) !important; }
-              .print-a4 .bg-primary\\/10 { background-color: rgba(128, 0, 255, 0.1) !important; }
-              .print-a4 .bg-muted { background-color: #F0E6FF !important; }
 
               .print-thermal .receipt-container { width: 72mm; font-size: 10pt; line-height: 1.3; margin: 0; padding: 4mm; }
               .print-thermal .text-lg { font-size: 11pt; }
@@ -139,29 +130,22 @@ export default function ReceiptPage() {
               .print-thermal .card-title { font-size: 13pt !important; }
               .print-thermal .icon-large { width: 32px !important; height: 32px !important; margin-bottom: 4px !important;}
               .print-thermal .icon-small { width: 16px !important; height: 16px !important; }
-              .print-thermal .bg-primary\\/5, .print-thermal .bg-primary\\/10, .print-thermal .bg-muted { background-color: transparent !important; }
-              .print-thermal .border, .print-thermal .border-primary\\/30 { border: none !important; }
+              .print-thermal .receipt-header-surface, .print-thermal .receipt-accent-surface, .print-thermal .receipt-muted-surface { background-color: transparent !important; }
+              .print-thermal .receipt-accent-border, .print-thermal .border { border: none !important; }
               .print-thermal .shadow-lg { box-shadow: none !important; }
               .print-thermal .rounded-full, .print-thermal .rounded-t-lg, .print-thermal .rounded-md { border-radius: 0 !important; }
-              .print-thermal .text-primary, .print-thermal .text-green-500, .print-thermal .text-green-600, .print-thermal .text-green-700 { color: black !important; }
-              .print-thermal .text-muted-foreground { color: #333 !important; }
+              .print-thermal .receipt-accent-text, .print-thermal .receipt-success-text { color: black !important; }
+              .print-thermal .receipt-muted-text { color: #333 !important; }
 
               .print-dot-matrix .receipt-container { width: 100%; font-family: 'Courier New', Courier, monospace; font-size: 10pt; padding: 5mm; }
               .print-dot-matrix .separator-line { border-top: 1px solid #333 !important; margin: 5px 0 !important; }
-              .print-dot-matrix .bg-primary\\/5, .print-dot-matrix .bg-primary\\/10, .print-dot-matrix .bg-muted { background-color: transparent !important; }
-              .print-dot-matrix .border, .print-dot-matrix .border-primary\\/30 { border: none !important; }
+              .print-dot-matrix .receipt-header-surface, .print-dot-matrix .receipt-accent-surface, .print-dot-matrix .receipt-muted-surface { background-color: transparent !important; }
+              .print-dot-matrix .receipt-accent-border, .print-dot-matrix .border { border: none !important; }
               .print-dot-matrix .shadow-lg { box-shadow: none !important; }
-              .print-dot-matrix .text-primary, .print-dot-matrix .text-green-500, .print-dot-matrix .text-green-600, .print-dot-matrix .text-green-700 { color: black !important; }
+              .print-dot-matrix .receipt-accent-text, .print-dot-matrix .receipt-success-text { color: black !important; }
 
               .print-small .receipt-container { width: 90mm; font-size: 9pt; padding: 5mm; margin: auto; }
               .print-small .separator-line { border-top: 1px dashed #777 !important; margin: 6px 0 !important; }
-              .print-small .bg-primary\\/5 { background-color: rgba(128, 0, 255, 0.05) !important; }
-              .print-small .bg-primary\\/10 { background-color: rgba(128, 0, 255, 0.1) !important; }
-              .print-small .bg-muted { background-color: #F0E6FF !important; }
-              .print-small .text-primary { color: #8000FF !important; }
-              .print-small .text-green-500 { color: #22C55E !important; }
-              .print-small .text-green-600 { color: #16A34A !important; }
-              .print-small .text-green-700 { color: #15803d !important; }
             }
           </style>
         `);
@@ -170,12 +154,12 @@ export default function ReceiptPage() {
         printWindow.document.write('<div class="receipt-container">');
         const clonedContent = printContent.cloneNode(true) as HTMLElement;
         if (selectedPaperSize === 'thermal') {
-            const mainIcon = clonedContent.querySelector('.h-16.w-16.text-green-500');
+            const mainIcon = clonedContent.querySelector('.receipt-success-icon');
             if (mainIcon) {
                 mainIcon.classList.remove('h-16', 'w-16');
                 mainIcon.classList.add('icon-large');
             }
-            const productIconElement = clonedContent.querySelector('.h-6.w-6.text-primary');
+            const productIconElement = clonedContent.querySelector('.receipt-product-icon');
             if (productIconElement) {
                 productIconElement.classList.remove('h-6', 'w-6');
                 productIconElement.classList.add('icon-small');
@@ -253,8 +237,8 @@ export default function ReceiptPage() {
 
   if (isLoading || transaction === undefined) { 
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-muted-foreground">
-        <Loader2 className="h-12 w-12 animate-spin mb-4 text-primary" />
+      <div className={`flex min-h-[calc(100vh-200px)] flex-col items-center justify-center ${themedMutedTextClass}`}>
+        <Loader2 className="mb-4 h-12 w-12 animate-spin text-[var(--ui-accent)]" />
         <p className="text-lg">Loading receipt...</p>
       </div>
     );
@@ -262,31 +246,40 @@ export default function ReceiptPage() {
 
   if (!transaction) { 
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
-        <XCircle className="h-16 w-16 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Transaction Not Found</h1>
-        <p className="text-muted-foreground mb-6">The transaction ID provided does not match any recorded transaction.</p>
-        <Button onClick={() => router.push('/transactions')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Go to Transactions
-        </Button>
+      <div className="mx-auto flex min-h-[calc(100vh-200px)] max-w-md items-center justify-center px-4">
+        <Card className={`w-full rounded-3xl ${themedPageCardClass}`}>
+          <CardContent className="flex flex-col items-center px-6 py-10 text-center">
+            <XCircle className="mb-4 h-16 w-16 text-destructive" />
+            <h1 className="mb-2 text-2xl font-bold text-[var(--ui-text)] dark:text-zinc-100">Transaction Not Found</h1>
+            <p className={`mb-6 ${themedMutedTextClass}`}>The transaction ID provided does not match any recorded transaction.</p>
+            <Button onClick={() => router.push('/transactions')} className={themedPrimaryButtonClass}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Go to Transactions
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
   
   if (transaction.status !== "Sukses") {
      return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
-        <Info className="h-16 w-16 text-yellow-500 mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Receipt Not Available</h1>
-        <p className="text-muted-foreground mb-6">
-          A receipt can only be generated for successful transactions. This transaction is currently: <strong className={
-            transaction.status === "Pending" ? "text-yellow-600" :
-            transaction.status === "Gagal" ? "text-red-600" : ""
-          }>{transaction.status}</strong>.
-        </p>
-        <Button onClick={() => router.push('/transactions')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Go to Transactions
-        </Button>
+      <div className="mx-auto flex min-h-[calc(100vh-200px)] max-w-md items-center justify-center px-4">
+        <Card className={`w-full rounded-3xl ${themedPageCardClass}`}>
+          <CardContent className="flex flex-col items-center px-6 py-10 text-center">
+            <Info className="mb-4 h-16 w-16 text-yellow-500" />
+            <h1 className="mb-2 text-2xl font-bold text-[var(--ui-text)] dark:text-zinc-100">Receipt Not Available</h1>
+            <p className={`mb-6 ${themedMutedTextClass}`}>
+              A receipt can only be generated for successful transactions. This transaction is currently:{" "}
+              <strong className={
+                transaction.status === "Pending" ? "text-yellow-600" :
+                transaction.status === "Gagal" ? "text-red-600" : ""
+              }>{transaction.status}</strong>.
+            </p>
+            <Button onClick={() => router.push('/transactions')} className={themedPrimaryButtonClass}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Go to Transactions
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -294,112 +287,108 @@ export default function ReceiptPage() {
   const ProductIcon = productIconsMapping[transaction.iconName] || productIconsMapping['Default'];
 
   return (
-    <div className="max-w-md mx-auto py-8 px-4">
-      <Button variant="outline" onClick={() => router.back()} className="mb-6 no-print">
+    <div className="mx-auto max-w-md px-4 py-8">
+      <Button variant="outline" onClick={() => router.back()} className={`mb-6 ${themedOutlineButtonClass}`}>
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 
       <div id="receipt-content-printable" ref={receiptContentRef}> 
-        <Card className="shadow-lg border-primary/30">
-          <CardHeader className="text-center bg-primary/5 rounded-t-lg pt-6 pb-4 card-header">
+        <Card className={`receipt-accent-border overflow-hidden rounded-3xl border shadow-lg ${themedPageCardClass}`}>
+          <CardHeader className="receipt-header-surface card-header rounded-t-3xl px-6 pb-4 pt-6 text-center">
             <div className="mx-auto mb-3">
-               <CheckCircle2 className="h-16 w-16 text-green-500 icon-large" />
+               <CheckCircle2 className="receipt-success-icon icon-large h-16 w-16 text-green-500" />
             </div>
-            <CardTitle className="text-2xl font-bold text-primary card-title">Transaction Successful</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">Receipt ID: {transaction.id}</CardDescription>
+            <CardTitle className="receipt-accent-text card-title text-2xl font-bold">Transaction Successful</CardTitle>
+            <CardDescription className={`receipt-muted-text text-sm ${themedMutedTextClass}`}>Receipt ID: {transaction.id}</CardDescription>
           </CardHeader>
-          <CardContent className="p-6 space-y-4 card-content">
+          <CardContent className="card-content space-y-4 p-6 text-[var(--ui-text)] dark:text-zinc-100">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary/10 rounded-full">
-                <ProductIcon className="h-6 w-6 text-primary icon-small" />
+              <div className="receipt-accent-surface rounded-full p-2">
+                <ProductIcon className="receipt-accent-text receipt-product-icon icon-small h-6 w-6" />
               </div>
               <div>
-                <p className="font-semibold text-lg">{transaction.productName}</p>
-                <p className="text-sm text-muted-foreground">{transaction.details}</p>
+                <p className="text-lg font-semibold text-[var(--ui-text)] dark:text-zinc-100">{transaction.productName}</p>
+                <p className={`receipt-muted-text text-sm ${themedMutedTextClass}`}>{transaction.details}</p>
               </div>
             </div>
 
-            <Separator className="separator-line" />
+            <Separator className="separator-line bg-[var(--ui-border)] dark:bg-zinc-800" />
 
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between details-item">
-                <span className="text-muted-foreground">Status:</span>
-                <span className="font-semibold text-green-600">{transaction.status}</span>
+              <div className="details-item flex justify-between">
+                <span className={`receipt-muted-text ${themedMutedTextClass}`}>Status:</span>
+                <span className="receipt-success-text font-semibold">{transaction.status}</span>
               </div>
-              <div className="flex justify-between details-item">
-                <span className="text-muted-foreground">Date & Time:</span>
-                <span className="font-medium">{formattedDate || 'Loading...'}</span>
+              <div className="details-item flex justify-between">
+                <span className={`receipt-muted-text ${themedMutedTextClass}`}>Date & Time:</span>
+                <span className="font-medium text-[var(--ui-text)] dark:text-zinc-100">{formattedDate || 'Loading...'}</span>
               </div>
               {transaction.productCategoryFromProvider && (
-                  <div className="flex justify-between text-xs pt-1 details-item">
-                      <span className="text-muted-foreground">Category:</span>
-                      <span>{transaction.productCategoryFromProvider}</span>
+                  <div className="details-item flex justify-between pt-1 text-xs">
+                      <span className={`receipt-muted-text ${themedMutedTextClass}`}>Category:</span>
+                      <span className="text-[var(--ui-text)] dark:text-zinc-100">{transaction.productCategoryFromProvider}</span>
                   </div>
               )}
               {transaction.productBrandFromProvider && (
-                  <div className="flex justify-between text-xs details-item">
-                      <span className="text-muted-foreground">Brand:</span>
-                      <span>{transaction.productBrandFromProvider}</span>
+                  <div className="details-item flex justify-between text-xs">
+                      <span className={`receipt-muted-text ${themedMutedTextClass}`}>Brand:</span>
+                      <span className="text-[var(--ui-text)] dark:text-zinc-100">{transaction.productBrandFromProvider}</span>
                   </div>
               )}
-               <div className="flex flex-col sm:flex-row justify-between pt-2 sm:items-center details-item">
-                <span className="text-muted-foreground mb-1 sm:mb-0">Total Payment:</span>
+               <div className="details-item flex flex-col justify-between pt-2 sm:flex-row sm:items-center">
+                <span className={`receipt-muted-text mb-1 sm:mb-0 ${themedMutedTextClass}`}>Total Payment:</span>
                 <div className="receipt-price-input">
                   <Input 
                     type="number"
                     value={customSellingPrice}
                     onChange={(e) => setCustomSellingPrice(Number(e.target.value))}
-                    className="font-bold text-lg text-primary text-right h-9 w-full sm:max-w-[150px] p-1"
+                    className={`receipt-accent-text h-9 w-full p-1 text-right text-lg font-bold sm:max-w-[150px] ${themedInputClass}`}
                   />
                 </div>
-                <span className="font-bold text-lg text-primary receipt-price-display hidden">
+                <span className="receipt-accent-text receipt-price-display hidden text-lg font-bold">
                   Rp {customSellingPrice.toLocaleString()}
                 </span>
               </div>
-              
-              <div className="flex justify-between text-xs details-item no-print">
-                <span className="text-muted-foreground">Profit:</span>
-                <span className={`font-semibold ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>Rp {profit.toLocaleString()}</span>
-              </div>
-              
               {transaction.serialNumber && (
                 <div className="pt-3">
-                  <p className="text-muted-foreground text-xs mb-1">Serial Number (SN) / Token:</p>
-                  <div className="p-3 bg-muted rounded-md text-center">
-                    <p className="font-mono text-lg font-semibold text-primary break-all">{transaction.serialNumber}</p>
+                  <p className={`receipt-muted-text mb-1 text-xs ${themedMutedTextClass}`}>Serial Number (SN) / Token:</p>
+                  <div className="receipt-muted-surface rounded-md border border-[var(--ui-border)] p-3 text-center dark:border-zinc-800">
+                    <p className="receipt-accent-text break-all font-mono text-lg font-semibold">{transaction.serialNumber}</p>
                   </div>
                 </div>
               )}
             </div>
             
-            <Separator className="my-6 separator-line" />
+            <Separator className="separator-line my-6 bg-[var(--ui-border)] dark:bg-zinc-800" />
             
-            <p className="text-xs text-center text-muted-foreground">
+            <p className={`receipt-muted-text text-center text-xs ${themedMutedTextClass}`}>
               Thank you for your purchase at ePulsaku!
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-6 no-print space-y-3">
+      <div className="no-print mt-6 space-y-3">
         <div>
-          <Label htmlFor="paper-size-select" className="text-sm font-medium">Paper Size (for Print)</Label>
+          <Label htmlFor="paper-size-select" className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100">Paper Size (for Print)</Label>
           <Select value={selectedPaperSize} onValueChange={(value) => setSelectedPaperSize(value as PaperSize)}>
-            <SelectTrigger id="paper-size-select" className="w-full mt-1">
+            <SelectTrigger id="paper-size-select" className={`mt-1 w-full ${themedInputClass}`}>
               <SelectValue placeholder="Select paper size" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
               {paperSizeOptions.map(option => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                <SelectItem key={option.value} value={option.value} className="focus:bg-[var(--ui-accent-bg)] focus:text-[var(--ui-accent)] dark:focus:bg-zinc-900">
+                  {option.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Button onClick={handlePrint} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+          <Button onClick={handlePrint} className={`w-full ${themedPrimaryButtonClass}`}>
             <Printer className="mr-2 h-4 w-4" /> Print
           </Button>
-          <Button onClick={handleShare} className="w-full" variant="outline">
+          <Button onClick={handleShare} className={`w-full ${themedOutlineButtonClass}`} variant="outline">
             <Share2 className="mr-2 h-4 w-4" /> Share
           </Button>
         </div>

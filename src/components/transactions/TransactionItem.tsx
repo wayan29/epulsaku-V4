@@ -1,8 +1,8 @@
-// src/components/transactions/TransactionItem.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,7 +15,17 @@ import {
   AlertDialogTrigger,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -46,17 +56,20 @@ import {
   Briefcase,
   FileText,
   UserCircle,
+  Hand,
+  MessageSquare,
+  Flag,
 } from "lucide-react";
-import { purchaseDigiflazzProduct } from "@/ai/flows/purchase-digiflazz-product-flow";
-import { checkTokoVoucherTransactionStatus } from "@/ai/flows/tokovoucher/checkTokoVoucherTransactionStatus-flow";
 import { useToast } from "@/hooks/use-toast";
 import {
-  updateTransactionInDB,
+  addTransactionInternalNoteInDB,
+  claimTransactionInDB,
   deleteTransactionFromDB,
-  getTransactionByIdFromDB,
+  listTransactionInternalNotesFromDB,
+  refreshPendingTransactionsFromDB,
+  unclaimTransactionInDB,
+  type TransactionInternalNote,
 } from "@/lib/transaction-utils";
-import { trySendTelegramNotification } from "@/lib/notification-utils";
-import { getEffectiveSellingPrice } from "@/lib/price-settings-utils";
 import { formatDateInTimezone } from "@/lib/timezone";
 
 export const productIconsMapping: { [key: string]: LucideIcon } = {
@@ -146,10 +159,18 @@ export interface TransactionCore {
   transactedBy?: string;
 }
 
+export type TransactionInternalPriority = "normal" | "handover";
+
 export interface Transaction extends TransactionCore {
   iconName: string;
   categoryKey: string;
   _id?: string;
+  claimedByUserId?: string;
+  claimedByUsername?: string;
+  claimedAt?: string;
+  internalPriority?: TransactionInternalPriority;
+  lastInternalNoteAt?: string;
+  lastInternalNotePreview?: string;
 }
 
 export interface NewTransactionInput extends TransactionCore {}
@@ -166,7 +187,7 @@ const statusConfig: {
     icon: CheckCircle2,
     color: "bg-green-500 hover:bg-green-500",
     textColor: "text-green-700",
-    displayText: "Success",
+    displayText: "Sukses",
   },
   Pending: {
     icon: Loader2,
@@ -178,13 +199,14 @@ const statusConfig: {
     icon: XCircle,
     color: "bg-red-500 hover:bg-red-500",
     textColor: "text-red-700",
-    displayText: "Failed",
+    displayText: "Gagal",
   },
 };
 
 interface TransactionItemProps {
   transaction: Transaction;
   onTransactionUpdate: () => void;
+  isHighlighted?: boolean;
 }
 
 interface DetailRowProps {
@@ -203,12 +225,12 @@ const DetailRow: React.FC<DetailRowProps> = ({
   isMono,
 }) => (
   <div className="grid grid-cols-[max-content_1fr] items-start gap-x-3 py-1.5">
-    <div className="flex items-center text-muted-foreground">
-      <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
-      <span className="font-medium text-xs sm:text-sm">{label}:</span>
+    <div className="flex items-center text-[var(--ui-text-muted)] dark:text-zinc-400">
+      <Icon className="mr-2 h-4 w-4 flex-shrink-0" />
+      <span className="text-xs font-medium sm:text-sm">{label}:</span>
     </div>
     <div
-      className={`text-foreground break-words text-xs sm:text-sm ${valueClassName} ${
+      className={`break-words text-xs text-[var(--ui-text)] dark:text-zinc-100 sm:text-sm ${valueClassName} ${
         isMono ? "font-mono" : ""
       }`}
     >
@@ -220,6 +242,7 @@ const DetailRow: React.FC<DetailRowProps> = ({
 export default function TransactionItem({
   transaction,
   onTransactionUpdate,
+  isHighlighted = false,
 }: TransactionItemProps) {
   const {
     id,
@@ -227,6 +250,7 @@ export default function TransactionItem({
     details,
     status,
     timestamp,
+    sellingPrice,
     serialNumber,
     failureReason,
     buyerSkuCode,
@@ -238,14 +262,27 @@ export default function TransactionItem({
     source,
     providerTransactionId,
     transactedBy,
+    claimedByUserId,
+    claimedByUsername,
+    claimedAt,
+    internalPriority,
+    lastInternalNoteAt,
+    lastInternalNotePreview,
   } = transaction;
 
-  const effectiveSellingPrice = useMemo(() => {
-    return getEffectiveSellingPrice(buyerSkuCode, provider, costPrice);
-  }, [buyerSkuCode, provider, costPrice]);
-
+  const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+
+  const displaySellingPrice = useMemo(() => {
+    if (typeof sellingPrice === "number" && sellingPrice > 0) {
+      return sellingPrice;
+    }
+
+    if (costPrice < 20000) return costPrice + 1000;
+    if (costPrice <= 50000) return costPrice + 1500;
+    return costPrice + 2000;
+  }, [costPrice, sellingPrice]);
 
   const ProductIconComponent =
     productIconsMapping[iconName] || productIconsMapping["Default"];
@@ -256,25 +293,70 @@ export default function TransactionItem({
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [isUnclaiming, setIsUnclaiming] = useState(false);
+  const [notes, setNotes] = useState<TransactionInternalNote[]>([]);
+  const [noteInput, setNoteInput] = useState("");
+  const [markForHandover, setMarkForHandover] = useState(
+    internalPriority === "handover"
+  );
+
+  useEffect(() => {
+    setMarkForHandover(internalPriority === "handover");
+  }, [internalPriority]);
+
+  const isPending = status === "Pending";
+  const isMine = !!user?.id && claimedByUserId === user.id;
+  const isClaimedByOther = !!claimedByUserId && !isMine;
+
+  const loadNotes = useCallback(async () => {
+    setIsLoadingNotes(true);
+    try {
+      const result = await listTransactionInternalNotesFromDB(id);
+      setNotes(result);
+    } catch (error) {
+      toast({
+        title: "Gagal memuat catatan",
+        description:
+          error instanceof Error ? error.message : "Tidak dapat memuat catatan internal.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingNotes(false);
+    }
+  }, [id, toast]);
+
+  useEffect(() => {
+    if (isNotesDialogOpen) {
+      void loadNotes();
+    }
+  }, [isNotesDialogOpen, loadNotes]);
+
+  const stopCardOpen = (event: React.SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   const handleViewReceipt = () => {
     if (status === "Sukses") {
       router.push(`/receipt/${id}`);
-    } else {
-      toast({
-        title: "Receipt Not Available",
-        description:
-          "A receipt can only be viewed for successful transactions.",
-        variant: "default",
-      });
+      return;
     }
+
+    toast({
+      title: "Struk belum tersedia",
+      description: "Struk hanya bisa dibuka untuk transaksi yang sukses.",
+    });
   };
 
   const handleCheckStatus = async () => {
     if (!id) {
       toast({
-        title: "Error",
-        description: "Transaction ID is missing.",
+        title: "Gagal",
+        description: "ID transaksi tidak ditemukan.",
         variant: "destructive",
       });
       return;
@@ -282,121 +364,53 @@ export default function TransactionItem({
 
     setIsCheckingStatus(true);
     try {
-      let newStatus: TransactionStatus | undefined;
-      let snFromProvider: string | null | undefined = null;
-      let messageFromProvider: string | null | undefined = null;
-      let trxIdFromProvider: string | null | undefined = null;
-      let priceFromProvider: number | null | undefined = null;
+      const refreshResult = await refreshPendingTransactionsFromDB([id]);
+      const itemResult = refreshResult.items[0];
 
-      if (provider === "tokovoucher") {
-        const tokovoucherStatusResult =
-          await checkTokoVoucherTransactionStatus({ ref_id: id });
-        if (tokovoucherStatusResult.isSuccess) {
-          newStatus = tokovoucherStatusResult.status;
-          snFromProvider = tokovoucherStatusResult.sn;
-          messageFromProvider = tokovoucherStatusResult.message;
-          trxIdFromProvider = tokovoucherStatusResult.trx_id;
-          priceFromProvider = tokovoucherStatusResult.price;
-        } else {
-          toast({
-            title: "Status Check Info",
-            description:
-              tokovoucherStatusResult.message ||
-              "Could not get status from TokoVoucher.",
-            variant: "default",
-          });
-          setIsCheckingStatus(false);
-          return;
-        }
-      } else {
-        // digiflazz
-        if (!buyerSkuCode || !originalCustomerNo) {
-          toast({
-            title: "Error",
-            description: "Missing data for Digiflazz status check.",
-            variant: "destructive",
-          });
-          setIsCheckingStatus(false);
-          return;
-        }
-        const digiflazzResult = await purchaseDigiflazzProduct({
-          buyerSkuCode: buyerSkuCode,
-          customerNo: originalCustomerNo,
-          refId: id,
+      if (!refreshResult.success || !itemResult) {
+        toast({
+          title: "Cek status gagal",
+          description:
+            refreshResult.message ||
+            "Tidak dapat merefresh transaksi pending ini dari server.",
+          variant: "destructive",
         });
-        newStatus = digiflazzResult.status as TransactionStatus | undefined;
-        snFromProvider = digiflazzResult.sn;
-        messageFromProvider = digiflazzResult.message;
-        priceFromProvider = digiflazzResult.price;
+        return;
       }
 
-      if (newStatus && newStatus !== status) {
-        const updateData: any = {
-          id: id,
-          status: newStatus,
-          serialNumber: snFromProvider || undefined,
-          failureReason:
-            newStatus === "Gagal"
-              ? messageFromProvider ||
-                (provider === "tokovoucher" && snFromProvider)
-              : undefined,
-          providerTransactionId: trxIdFromProvider || undefined,
-          costPrice: priceFromProvider ?? undefined,
-        };
-
-        const updateResult = await updateTransactionInDB(updateData);
-        if (updateResult.success) {
-          const freshTx = await getTransactionByIdFromDB(id);
-          if (freshTx) {
-            trySendTelegramNotification({
-              refId: freshTx.id,
-              productName: freshTx.productName,
-              customerNoDisplay: freshTx.details,
-              status: newStatus,
-              provider: freshTx.provider,
-              costPrice: updateData.costPrice ?? freshTx.costPrice,
-              sellingPrice: freshTx.sellingPrice,
-              profit:
-                newStatus === "Sukses"
-                  ? freshTx.sellingPrice -
-                    (updateData.costPrice ?? freshTx.costPrice)
-                  : undefined,
-              sn: updateData.serialNumber || null,
-              failureReason: updateData.failureReason || null,
-              timestamp: new Date(),
-              additionalInfo: "Manual Check",
-              trxId: updateData.providerTransactionId || freshTx.providerTransactionId,
-              transactedBy: freshTx.transactedBy,
-            });
-          }
-          toast({
-            title: "Status Updated",
-            description: `Transaction status changed to ${newStatus}. ${
-              messageFromProvider || ""
-            }`,
-          });
-          onTransactionUpdate();
-        } else {
-          toast({
-            title: "DB Update Failed",
-            description: updateResult.message,
-            variant: "destructive",
-          });
-        }
-      } else {
+      if (itemResult.skipped) {
         toast({
-          title: "Status Unchanged",
-          description: `Transaction is still ${status}. ${
-            messageFromProvider || "No new information."
+          title: "Dikelola webhook",
+          description:
+            itemResult.message ||
+            "Transaksi pending ini diperbarui oleh webhook, bukan refresh manual.",
+        });
+        return;
+      }
+
+      if (itemResult.changed) {
+        toast({
+          title: "Status diperbarui",
+          description: `Status transaksi berubah menjadi ${itemResult.currentStatus}. ${
+            itemResult.message || ""
           }`,
         });
+        void onTransactionUpdate();
+        return;
       }
-    } catch (error) {
-      console.error("Error checking transaction status:", error);
+
       toast({
-        title: "Error Checking Status",
+        title: "Status belum berubah",
+        description: `Status transaksi masih ${itemResult.currentStatus}. ${
+          itemResult.message || "Belum ada info baru."
+        }`,
+      });
+    } catch (error) {
+      console.error("Gagal mengecek status transaksi:", error);
+      toast({
+        title: "Gagal mengecek status",
         description:
-          error instanceof Error ? error.message : "An unknown error occurred.",
+          error instanceof Error ? error.message : "Terjadi error yang tidak diketahui.",
         variant: "destructive",
       });
     } finally {
@@ -409,16 +423,14 @@ export default function TransactionItem({
     const deleteResult = await deleteTransactionFromDB(id);
     if (deleteResult.success) {
       toast({
-        title: "Transaction Deleted",
-        description: `Transaction ID ${id} has been removed from history.`,
+        title: "Transaksi dihapus",
+        description: `ID transaksi ${id} sudah dihapus dari riwayat.`,
       });
       onTransactionUpdate();
     } else {
       toast({
-        title: "Deletion Failed",
-        description:
-          deleteResult.message ||
-          `Could not delete transaction ID ${id}.`,
+        title: "Gagal menghapus",
+        description: deleteResult.message || `Tidak dapat menghapus ID transaksi ${id}.`,
         variant: "destructive",
       });
     }
@@ -427,23 +439,82 @@ export default function TransactionItem({
   };
 
   const handleCopySn = () => {
-    if (serialNumber) {
-      navigator.clipboard
-        .writeText(serialNumber)
-        .then(() => {
-          toast({
-            title: "SN Copied!",
-            description: "Serial number copied to clipboard.",
-          });
-        })
-        .catch((err) => {
-          console.error("Failed to copy SN:", err);
-          toast({
-            title: "Copy Failed",
-            description: "Could not copy serial number.",
-            variant: "destructive",
-          });
+    if (!serialNumber) return;
+
+    navigator.clipboard
+      .writeText(serialNumber)
+      .then(() => {
+        toast({
+          title: "SN disalin",
+          description: "Serial number sudah disalin ke clipboard.",
         });
+      })
+      .catch((err) => {
+        console.error("Gagal menyalin SN:", err);
+        toast({
+          title: "Gagal menyalin",
+          description: "Serial number tidak dapat disalin.",
+          variant: "destructive",
+        });
+      });
+  };
+
+  const handleClaim = async () => {
+    setIsClaiming(true);
+    try {
+      const result = await claimTransactionInDB(id);
+      toast({
+        title: result.success ? "Transaksi diklaim" : "Klaim gagal",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+      if (result.success) {
+        onTransactionUpdate();
+      }
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  const handleUnclaim = async () => {
+    setIsUnclaiming(true);
+    try {
+      const result = await unclaimTransactionInDB(id);
+      toast({
+        title: result.success ? "Klaim dilepas" : "Lepas klaim gagal",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+      if (result.success) {
+        onTransactionUpdate();
+      }
+    } finally {
+      setIsUnclaiming(false);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    setIsSavingNote(true);
+    try {
+      const result = await addTransactionInternalNoteInDB(
+        id,
+        noteInput,
+        markForHandover ? "handover" : "normal"
+      );
+
+      toast({
+        title: result.success ? "Catatan internal tersimpan" : "Gagal menyimpan",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+
+      if (result.success) {
+        setNoteInput("");
+        await loadNotes();
+        onTransactionUpdate();
+      }
+    } finally {
+      setIsSavingNote(false);
     }
   };
 
@@ -451,8 +522,14 @@ export default function TransactionItem({
     provider === "tokovoucher" ? "TokoVoucher" : "Digiflazz";
   const providerColorClass =
     provider === "tokovoucher"
-      ? "border-blue-500/50 text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-900/30 dark:border-blue-400/50"
-      : "border-purple-500/50 text-purple-700 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30 dark:border-purple-400/50";
+      ? "border-[var(--ui-accent)]/25 bg-[var(--ui-accent-bg)] text-[var(--ui-accent)]"
+      : "border-purple-500/50 bg-purple-50 text-purple-700 dark:border-purple-400/50 dark:bg-purple-900/30 dark:text-purple-300";
+  const statusBadgeClass =
+    status === "Sukses"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : status === "Gagal"
+        ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
 
   const getCategoryColor = () => {
     const gameKeywords = [
@@ -471,114 +548,222 @@ export default function TransactionItem({
       )
     ) {
       return productCategoryColors["Game"];
-    } else if (iconNameUpper.includes("PULSA")) {
+    }
+    if (iconNameUpper.includes("PULSA")) {
       return productCategoryColors["Pulsa"];
-    } else if (
-      iconNameUpper.includes("TOKEN") ||
-      iconNameUpper.includes("PLN")
-    ) {
+    }
+    if (iconNameUpper.includes("TOKEN") || iconNameUpper.includes("PLN")) {
       return productCategoryColors["Token Listrik"];
-    } else if (iconNameUpper.includes("E-MONEY")) {
+    }
+    if (iconNameUpper.includes("E-MONEY")) {
       return productCategoryColors["E-Money"];
     }
     return productCategoryColors["Default"];
   };
 
   const categoryColor = getCategoryColor();
+  const highlightCardClass = isHighlighted
+    ? "ring-2 ring-[var(--ui-accent)] ring-offset-2 ring-offset-background"
+    : "";
+  const otherClaimCardClass = isClaimedByOther
+    ? "border-red-200 bg-red-50/70 dark:border-red-900/40 dark:bg-red-950/30"
+    : "border-[var(--ui-border)] bg-[var(--ui-card)] dark:border-zinc-800 dark:bg-zinc-950";
+  const otherClaimPanelClass = isClaimedByOther
+    ? "border-red-200 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/40"
+    : "border-[var(--ui-border)] bg-[var(--ui-card-alt)] dark:border-zinc-800 dark:bg-zinc-900";
 
   return (
     <>
       <AlertDialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <AlertDialogTrigger asChild>
           <Card
-            className={`overflow-hidden transaction-card ${categoryColor.cssClass} shadow-md hover:shadow-lg cursor-pointer relative border-t-4 border-t-primary/80 group`}
+            className={`transaction-card ${categoryColor.cssClass} ${highlightCardClass} ${otherClaimCardClass} group relative cursor-pointer overflow-hidden rounded-3xl border border-t-4 ${isClaimedByOther ? "border-t-red-500" : "border-t-[var(--ui-accent)]"} text-[var(--ui-text)] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:text-zinc-100`}
           >
             <div
-              className={`absolute inset-0 opacity-0 group-hover:opacity-10 bg-gradient-to-br ${categoryColor.gradient} transition-opacity duration-300`}
+              className={`absolute inset-0 bg-gradient-to-br ${categoryColor.gradient} opacity-0 transition-opacity duration-300 group-hover:opacity-10`}
             />
-            <div className="absolute top-2 right-2">
-              <Badge
-                variant={
-                  status === "Sukses"
-                    ? "default"
-                    : status === "Gagal"
-                    ? "destructive"
-                    : "secondary"
-                }
-                className={`status-badge ${
-                  status === "Sukses"
-                    ? "bg-green-100 text-green-800 border-green-300 shadow dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50"
-                    : status === "Gagal"
-                    ? "bg-red-100 text-red-800 border-red-300 shadow dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50"
-                    : "bg-yellow-100 text-yellow-800 border-yellow-300 shadow dark:bg-yellow-900/30 dark:text-yellow-700 dark:border-yellow-700/50"
-                }`}
-              >
-                <SIcon
-                  className={`mr-1 h-3 w-3 ${
-                    status === "Pending" ? "animate-spin" : ""
-                  }`}
-                />
+            <div className="absolute right-2 top-2">
+              <Badge variant="outline" className={`status-badge shadow-sm ${statusBadgeClass}`}>
+                <SIcon className={`mr-1 h-3 w-3 ${status === "Pending" ? "animate-spin" : ""}`} />
                 {currentStatusConfig.displayText}
               </Badge>
             </div>
             <CardHeader className="pb-1 pt-4">
               <div className="flex items-start gap-3">
                 <div
-                  className={`p-2 rounded-full ${categoryColor.light} ${categoryColor.dark} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}
+                  className={`flex items-center justify-center rounded-full p-2 transition-transform duration-300 group-hover:scale-110 ${categoryColor.light} ${categoryColor.dark}`}
                 >
                   <ProductIconComponent className={`h-6 w-6 ${categoryColor.icon}`} />
                 </div>
                 <div className="space-y-1">
-                  <CardTitle className="text-lg font-semibold font-headline line-clamp-1">
+                  <CardTitle className="line-clamp-1 font-headline text-lg font-semibold text-[var(--ui-text)] dark:text-zinc-100">
                     {productName}
                   </CardTitle>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <Badge
-                      variant="outline"
-                      className={`text-xs capitalize ${providerColorClass}`}
-                    >
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className={`text-xs capitalize ${providerColorClass}`}>
                       {providerDisplayName}
                     </Badge>
                     {productBrandFromProvider && (
                       <Badge
                         variant="outline"
-                        className="text-xs bg-slate-50 dark:bg-slate-800 dark:text-slate-300"
+                        className="border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-xs text-[var(--ui-text-muted)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"
                       >
                         {productBrandFromProvider}
                       </Badge>
                     )}
                     {transactedBy && (
-                      <Badge className="text-xs border-gray-400/50 text-gray-600 bg-gray-50" variant="outline">
-                        <UserCircle className="h-3 w-3 mr-1" /> {transactedBy}
+                      <Badge
+                        className="border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-xs text-[var(--ui-text-muted)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"
+                        variant="outline"
+                      >
+                        <UserCircle className="mr-1 h-3 w-3" /> {transactedBy}
+                      </Badge>
+                    )}
+                    {claimedByUsername && (
+                      <Badge
+                        variant="outline"
+                        className={isClaimedByOther ? "border-red-500/30 bg-red-500/10 text-xs text-red-700 dark:text-red-300" : "border-sky-500/30 bg-sky-500/10 text-xs text-sky-700 dark:text-sky-300"}
+                      >
+                        <Hand className="mr-1 h-3 w-3" /> {isMine ? "Klaim saya" : `Dipegang ${claimedByUsername}`}
+                      </Badge>
+                    )}
+                    {internalPriority === "handover" && (
+                      <Badge
+                        variant="outline"
+                        className="border-orange-500/30 bg-orange-500/10 text-xs text-orange-700 dark:text-orange-300"
+                      >
+                        <Flag className="mr-1 h-3 w-3" /> Perlu handover
                       </Badge>
                     )}
                     {source === "telegram_bot" && (
                       <Badge
                         variant="outline"
-                        className="text-xs border-sky-500/50 text-sky-700 bg-sky-50 dark:text-sky-300 dark:bg-sky-900/30 dark:border-sky-400/50"
+                        className="border-sky-500/50 bg-sky-50 text-xs text-sky-700 dark:border-sky-400/50 dark:bg-sky-900/30 dark:text-sky-300"
                       >
-                        <Bot className="h-3 w-3 mr-1" /> via Telegram
+                        <Bot className="mr-1 h-3 w-3" /> Lewat Telegram
                       </Badge>
                     )}
                   </div>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-3 pb-4">
+            <CardContent className="pb-4 pt-3">
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-1">
-                  <div className="flex items-center text-sm">
-                    <Info className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                    <span className="font-medium line-clamp-1">{details}</span>
+                  <div className="flex items-center text-sm text-[var(--ui-text)] dark:text-zinc-100">
+                    <Info className="mr-2 h-4 w-4 flex-shrink-0 text-[var(--ui-text-muted)] dark:text-zinc-400" />
+                    <span className="line-clamp-1 font-medium">{details}</span>
                   </div>
-                  <div className="flex items-center text-sm">
-                    <DollarSign className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                    <span className="font-semibold text-primary">
-                      Rp {effectiveSellingPrice.toLocaleString("id-ID")}
+                  <div className="flex items-center text-sm text-[var(--ui-text)] dark:text-zinc-100">
+                    <DollarSign className="mr-2 h-4 w-4 flex-shrink-0 text-[var(--ui-text-muted)] dark:text-zinc-400" />
+                    <span className="font-semibold text-[var(--ui-accent)]">
+                      Rp {displaySellingPrice.toLocaleString("id-ID")}
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground border-t border-border/50">
+
+                {(claimedByUsername || lastInternalNotePreview || isHighlighted) && (
+                  <div className={`space-y-2 rounded-2xl border p-3 ${otherClaimPanelClass}`}>
+                    {claimedByUsername && (
+                      <div
+                        className={`flex items-start gap-2 text-xs ${
+                          isClaimedByOther
+                            ? "text-red-700 dark:text-red-300"
+                            : "text-[var(--ui-text-muted)] dark:text-zinc-400"
+                        }`}
+                      >
+                        <Hand className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                        <span>
+                          {isClaimedByOther ? "Sedang dipegang oleh" : "Dipegang oleh"}{" "}
+                          <span className="font-semibold text-[var(--ui-text)] dark:text-zinc-100">
+                            {claimedByUsername}
+                          </span>
+                          {claimedAt ? ` • ${formatDateInTimezone(claimedAt)}` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {lastInternalNotePreview && (
+                      <div className="flex items-start gap-2 text-xs text-[var(--ui-text-muted)] dark:text-zinc-400">
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="line-clamp-2">
+                          {lastInternalNotePreview}
+                          {lastInternalNoteAt
+                            ? ` • ${formatDateInTimezone(lastInternalNoteAt)}`
+                            : ""}
+                        </span>
+                      </div>
+                    )}
+                    {isHighlighted && (
+                      <div className="flex items-start gap-2 text-xs text-[var(--ui-accent)] dark:text-sky-300">
+                        <Flag className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="font-semibold">Target dari catatan handover.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isPending && (
+                  <div className="flex flex-wrap gap-2 border-t border-[var(--ui-border)]/70 pt-2 dark:border-zinc-800">
+                    {isMine ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isUnclaiming}
+                        onPointerDown={stopCardOpen}
+                        onClick={(event) => {
+                          stopCardOpen(event);
+                          void handleUnclaim();
+                        }}
+                        className="rounded-xl border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)]"
+                      >
+                        {isUnclaiming ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Hand className="mr-2 h-4 w-4" />
+                        )}
+                        Lepas Klaim
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled={isClaiming || isClaimedByOther}
+                        onPointerDown={stopCardOpen}
+                        onClick={(event) => {
+                          stopCardOpen(event);
+                          void handleClaim();
+                        }}
+                        className={`rounded-xl text-white ${
+                          isClaimedByOther
+                            ? "bg-red-500 hover:bg-red-500"
+                            : "bg-[var(--ui-accent)] hover:bg-[var(--ui-accent-hover)]"
+                        }`}
+                      >
+                        {isClaiming ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Hand className="mr-2 h-4 w-4" />
+                        )}
+                        {isClaimedByOther ? "Sudah Diklaim" : "Klaim"}
+                      </Button>
+                    )}
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onPointerDown={stopCardOpen}
+                      onClick={(event) => {
+                        stopCardOpen(event);
+                        setIsNotesDialogOpen(true);
+                      }}
+                      className="rounded-xl border-[var(--ui-accent)]/25 text-[var(--ui-accent)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent-hover)]"
+                    >
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Catatan
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-t border-[var(--ui-border)]/70 pt-1 text-xs text-[var(--ui-text-muted)] dark:border-zinc-800 dark:text-zinc-400">
                   <div className="flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5" />
                     <span>{formatDateInTimezone(timestamp)}</span>
@@ -592,87 +777,134 @@ export default function TransactionItem({
             </CardContent>
           </Card>
         </AlertDialogTrigger>
-        <AlertDialogContent className="sm:max-w-lg overflow-hidden">
+        <AlertDialogContent className="overflow-hidden border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-3 font-headline text-xl">
-              <div className={`p-2 rounded-full ${categoryColor.light} ${categoryColor.dark}`}>
+            <AlertDialogTitle className="flex items-center gap-3 font-headline text-xl text-[var(--ui-text)] dark:text-zinc-100">
+              <div className={`rounded-full p-2 ${categoryColor.light} ${categoryColor.dark}`}>
                 <ProductIconComponent className={`h-6 w-6 ${categoryColor.icon}`} />
               </div>
-              Transaction Details
+              Detail Transaksi
             </AlertDialogTitle>
             <AlertDialogDescription className="sr-only">
-              Details of transaction {id}
+              Detail transaksi {id}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-2 py-1 pr-4">
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <DetailRow
                   icon={CalendarDays}
-                  label="Date"
+                  label="Tanggal"
                   value={formatDateInTimezone(timestamp)}
                 />
-                <Badge
-                  variant={
-                    status === "Sukses"
-                      ? "default"
-                      : status === "Gagal"
-                      ? "destructive"
-                      : "secondary"
-                  }
-                  className={`${
-                    status === "Sukses"
-                      ? "bg-green-100 text-green-800 border-green-300 shadow-sm dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50"
-                      : status === "Gagal"
-                      ? "bg-red-100 text-red-800 border-red-300 shadow-sm dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50"
-                      : "bg-yellow-100 text-yellow-800 border-yellow-300 shadow-sm dark:bg-yellow-900/30 dark:text-yellow-700 dark:border-yellow-700/50"
-                  }`}
-                >
+                <Badge variant="outline" className={`shadow-sm ${statusBadgeClass}`}>
                   <SIcon className={`mr-1 h-3.5 w-3.5 ${status === "Pending" ? "animate-spin" : ""}`} />
                   {currentStatusConfig.displayText}
                 </Badge>
               </div>
-              <Separator className="my-2" />
-              <DetailRow icon={Briefcase} label="Product" value={productName} valueClassName="font-semibold" />
-              <DetailRow icon={Info} label="Details" value={details} />
+              <Separator className="my-2 bg-[var(--ui-border)] dark:bg-zinc-800" />
+              <DetailRow
+                icon={Briefcase}
+                label="Produk"
+                value={productName}
+                valueClassName="font-semibold"
+              />
+              <DetailRow icon={Info} label="Detail" value={details} />
               {transactedBy && (
-                <DetailRow icon={UserCircle} label="User" value={transactedBy} valueClassName="font-semibold" />
+                <DetailRow
+                  icon={UserCircle}
+                  label="Pengguna"
+                  value={transactedBy}
+                  valueClassName="font-semibold"
+                />
               )}
               <DetailRow
                 icon={Building}
                 label="Provider"
                 value={providerDisplayName}
                 valueClassName={`capitalize font-semibold ${
-                  provider === "tokovoucher" ? "text-blue-600 dark:text-blue-400" : "text-purple-600 dark:text-purple-400"
+                  provider === "tokovoucher"
+                    ? "text-[var(--ui-accent)]"
+                    : "text-purple-700 dark:text-purple-300"
                 }`}
               />
+              {claimedByUsername && (
+                <DetailRow
+                  icon={Hand}
+                  label="Diklaim Oleh"
+                  value={`${claimedByUsername}${claimedAt ? ` • ${formatDateInTimezone(claimedAt)}` : ""}`}
+                  valueClassName="font-semibold"
+                />
+              )}
+              {lastInternalNotePreview && (
+                <DetailRow
+                  icon={MessageSquare}
+                  label="Catatan Terakhir"
+                  value={lastInternalNotePreview}
+                />
+              )}
+              {internalPriority === "handover" && (
+                <DetailRow
+                  icon={Flag}
+                  label="Prioritas Antrean"
+                  value="Ditandai untuk handover sif"
+                  valueClassName="font-semibold text-orange-600 dark:text-orange-300"
+                />
+              )}
               {source === "telegram_bot" && (
-                <DetailRow icon={Bot} label="Source" value="Telegram Bot" valueClassName="text-sky-700 font-semibold" />
+                <DetailRow
+                  icon={Bot}
+                  label="Sumber"
+                  value="Bot Telegram"
+                  valueClassName="font-semibold text-sky-700"
+                />
               )}
-              <Separator className="my-3" />
-              <DetailRow icon={Hash} label="Ref ID" value={<span className="font-mono">{id}</span>} />
+              <Separator className="my-3 bg-[var(--ui-border)] dark:bg-zinc-800" />
+              <DetailRow
+                icon={Hash}
+                label="ID Referensi"
+                value={<span className="font-mono">{id}</span>}
+              />
               {providerTransactionId && (
-                <DetailRow icon={Server} label="Provider Trx ID" value={<span className="font-mono">{providerTransactionId}</span>} />
+                <DetailRow
+                  icon={Server}
+                  label="ID Trx Provider"
+                  value={<span className="font-mono">{providerTransactionId}</span>}
+                />
               )}
-              <DetailRow icon={Code2} label="SKU Code" value={<span className="font-mono">{buyerSkuCode}</span>} />
-              <DetailRow icon={UserSquare2} label="Original Customer No" value={<span className="font-mono">{originalCustomerNo}</span>} />
+              <DetailRow
+                icon={Code2}
+                label="Kode SKU"
+                value={<span className="font-mono">{buyerSkuCode}</span>}
+              />
+              <DetailRow
+                icon={UserSquare2}
+                label="No. Pelanggan Asli"
+                value={<span className="font-mono">{originalCustomerNo}</span>}
+              />
 
-              <div className="p-3 rounded-md bg-muted/50 border border-border/50 mt-3 space-y-3">
+              <div className="mt-3 space-y-3 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-3 dark:border-zinc-800 dark:bg-zinc-900">
                 <DetailRow
                   icon={DollarSign}
-                  label="Selling Price"
-                  value={`Rp ${effectiveSellingPrice.toLocaleString("id-ID")}`}
-                  valueClassName="font-semibold text-primary"
+                  label="Harga Jual"
+                  value={`Rp ${displaySellingPrice.toLocaleString("id-ID")}`}
+                  valueClassName="font-semibold text-[var(--ui-accent)]"
                 />
                 {status === "Sukses" && typeof costPrice === "number" && (
                   <>
-                    <DetailRow icon={DollarSign} label="Cost Price" value={`Rp ${Number(costPrice).toLocaleString("id-ID")}`} />
                     <DetailRow
                       icon={DollarSign}
-                      label="Profit"
-                      value={`Rp ${(effectiveSellingPrice - Number(costPrice)).toLocaleString("id-ID")}`}
+                      label="Harga Modal"
+                      value={`Rp ${Number(costPrice).toLocaleString("id-ID")}`}
+                    />
+                    <DetailRow
+                      icon={DollarSign}
+                      label="Keuntungan"
+                      value={`Rp ${(displaySellingPrice - Number(costPrice)).toLocaleString("id-ID")}`}
                       valueClassName={`font-semibold ${
-                        effectiveSellingPrice - Number(costPrice) >= 0 ? "text-green-600" : "text-red-600"
+                        displaySellingPrice - Number(costPrice) >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
                       }`}
                     />
                   </>
@@ -681,19 +913,19 @@ export default function TransactionItem({
 
               {status === "Sukses" && serialNumber && (
                 <div className="space-y-1.5 pt-2">
-                  <div className="flex items-center text-muted-foreground">
-                    <Ticket className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span className="font-medium text-xs sm:text-sm">Serial Number (SN):</span>
+                  <div className="flex items-center text-[var(--ui-text-muted)] dark:text-zinc-400">
+                    <Ticket className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="text-xs font-medium sm:text-sm">Nomor Serial (SN):</span>
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-700/50 shadow-sm">
-                    <span className="font-mono text-green-700 dark:text-green-300 text-sm sm:text-base break-all">
+                  <div className="flex items-center justify-between rounded-md border border-green-200 bg-green-50 p-3 shadow-sm dark:border-green-700/50 dark:bg-green-900/20">
+                    <span className="break-all font-mono text-sm text-green-700 dark:text-green-300 sm:text-base">
                       {serialNumber}
                     </span>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={handleCopySn}
-                      className="h-8 w-8 ml-2 text-green-600 hover:text-green-800 hover:bg-green-100 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/30"
+                      className="ml-2 h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-800 dark:text-green-400 dark:hover:bg-green-900/30 dark:hover:text-green-300"
                     >
                       <Copy className="h-4 w-4" />
                     </Button>
@@ -702,86 +934,211 @@ export default function TransactionItem({
               )}
 
               {status === "Gagal" && failureReason && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-700/50 space-y-1 mt-2">
+                <div className="mt-2 space-y-1 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-700/50 dark:bg-red-900/20">
                   <div className="flex items-center text-red-800 dark:text-red-300">
-                    <LucideAlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span className="font-medium text-xs sm:text-sm">Failure Reason:</span>
+                    <LucideAlertCircle className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="text-xs font-medium sm:text-sm">Alasan Gagal:</span>
                   </div>
-                  <p className="text-red-700 dark:text-red-300 text-sm pl-6">{failureReason}</p>
+                  <p className="pl-6 text-sm text-red-700 dark:text-red-300">{failureReason}</p>
                 </div>
               )}
 
               {status === "Pending" && (
-                <div className="flex items-center p-3 text-yellow-700 dark:text-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-700/50 shadow-sm mt-2">
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin flex-shrink-0" />
+                <div className="mt-2 flex items-center rounded-md border border-yellow-200 bg-yellow-50 p-3 text-yellow-700 shadow-sm dark:border-yellow-700/50 dark:bg-yellow-900/20 dark:text-yellow-300">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin flex-shrink-0" />
                   <p className="text-xs sm:text-sm">
-                    This transaction is currently being processed. You can check the status to see if it has completed.
+                    {provider === "tokovoucher"
+                      ? "Transaksi ini masih diproses. Refresh status untuk mengecek hasil provider terbaru dari server."
+                      : "Transaksi ini masih diproses. Digiflazz memperbarui status lewat webhook, jadi refresh manual dinonaktifkan."}
                   </p>
                 </div>
               )}
             </div>
           </ScrollArea>
-          <AlertDialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4 mt-2">
+          <AlertDialogFooter className="mt-2 flex flex-col gap-2 pt-4 sm:flex-row sm:justify-end">
+            {isPending && (
+              <Button
+                variant="outline"
+                onClick={() => setIsNotesDialogOpen(true)}
+                className="w-full shrink-0 border-[var(--ui-accent)]/25 text-[var(--ui-accent)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent-hover)] sm:w-auto"
+              >
+                <MessageSquare className="mr-2 h-4 w-4" /> Catatan
+              </Button>
+            )}
+
             <Button
               variant="destructive"
               onClick={() => setIsConfirmingDelete(true)}
-              className="w-full sm:w-auto shrink-0"
+              className="w-full shrink-0 sm:w-auto"
             >
-              <Trash2 className="mr-2 h-4 w-4" /> Delete
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus
             </Button>
-            
-            {status === 'Pending' && (
-                <Button
-                    variant="default"
-                    onClick={handleCheckStatus}
-                    disabled={isCheckingStatus}
-                    className="w-full sm:w-auto shrink-0"
-                >
-                    {isCheckingStatus ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    )}
-                    Check Status
-                </Button>
+
+            {status === "Pending" && provider === "tokovoucher" && (
+              <Button
+                onClick={handleCheckStatus}
+                disabled={isCheckingStatus}
+                className="w-full shrink-0 bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)] sm:w-auto"
+              >
+                {isCheckingStatus ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Refresh Status Sekarang
+              </Button>
+            )}
+
+            {status === "Pending" && provider === "digiflazz" && (
+              <Button
+                variant="outline"
+                disabled
+                className="w-full shrink-0 border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text-muted)] opacity-80 sm:w-auto"
+              >
+                <Server className="mr-2 h-4 w-4" />
+                Dikelola Webhook
+              </Button>
             )}
 
             {status === "Sukses" && (
               <Button
-                  variant="outline"
-                  onClick={handleViewReceipt}
-                  className="w-full sm:w-auto hover:bg-green-50 dark:hover:bg-green-900/20 border-green-200 dark:border-green-700/50 text-green-700 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 shrink-0"
-                >
-                  <FileText className="mr-2 h-4 w-4" /> View Receipt
+                variant="outline"
+                onClick={handleViewReceipt}
+                className="w-full shrink-0 border-[var(--ui-accent)]/25 text-[var(--ui-accent)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent-hover)] sm:w-auto"
+              >
+                <FileText className="mr-2 h-4 w-4" /> Lihat Struk
               </Button>
             )}
-            
-            <AlertDialogCancel className="w-full sm:w-auto mt-0">Close</AlertDialogCancel>
+
+            <AlertDialogCancel className="mt-0 w-full border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 sm:w-auto">
+              Tutup
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog konfirmasi hapus */}
+      <Dialog open={isNotesDialogOpen} onOpenChange={setIsNotesDialogOpen}>
+        <DialogContent className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-[var(--ui-accent)]" />
+              Catatan Internal
+            </DialogTitle>
+            <DialogDescription>
+              Catat update operasional untuk transaksi {id}. Gunakan tanda handover bila perlu diteruskan ke sif berikutnya.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="mb-3 flex flex-wrap gap-2">
+                {claimedByUsername && (
+                  <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">
+                    <Hand className="mr-1 h-3 w-3" /> {claimedByUsername}
+                  </Badge>
+                )}
+                {internalPriority === "handover" && (
+                  <Badge variant="outline" className="border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300">
+                    <Flag className="mr-1 h-3 w-3" /> Ditandai untuk Handover
+                  </Badge>
+                )}
+              </div>
+              <Textarea
+                value={noteInput}
+                onChange={(event) => setNoteInput(event.target.value)}
+                placeholder="Contoh: customer sudah konfirmasi pembayaran, masih tunggu update provider / lanjut pantau sampai status sukses."
+                className="min-h-[110px] rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)]"
+              />
+              <div className="mt-3 flex items-center gap-3">
+                <Checkbox
+                  id={`handover-${id}`}
+                  checked={markForHandover}
+                  onCheckedChange={(checked) => setMarkForHandover(checked === true)}
+                />
+                <label htmlFor={`handover-${id}`} className="text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
+                  Tandai transaksi ini untuk handover sif berikutnya.
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card)] dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="border-b border-[var(--ui-border)] px-4 py-3 dark:border-zinc-800">
+                <h3 className="font-semibold text-[var(--ui-text)] dark:text-zinc-100">Riwayat Catatan</h3>
+              </div>
+              <ScrollArea className="max-h-[280px]">
+                <div className="space-y-3 p-4">
+                  {isLoadingNotes ? (
+                    <div className="flex items-center justify-center py-8 text-[var(--ui-text-muted)] dark:text-zinc-400">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memuat catatan...
+                    </div>
+                  ) : notes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-[var(--ui-border)] p-6 text-center text-sm text-[var(--ui-text-muted)] dark:border-zinc-800 dark:text-zinc-400">
+                      Belum ada catatan internal untuk transaksi ini.
+                    </div>
+                  ) : (
+                    notes.map((note) => (
+                      <div key={note._id || `${note.transactionId}-${note.createdAt}`} className="rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ui-text-secondary)] dark:text-zinc-500">
+                          <Badge variant="outline" className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                            {note.createdByUsername}
+                          </Badge>
+                          <span>{formatDateInTimezone(note.createdAt)}</span>
+                        </div>
+                        <p className="text-sm text-[var(--ui-text)] dark:text-zinc-100">{note.note}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsNotesDialogOpen(false)}
+              className="border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)]"
+            >
+              Tutup
+            </Button>
+            <Button
+              onClick={() => void handleSaveNote()}
+              disabled={isSavingNote}
+              className="bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]"
+            >
+              {isSavingNote ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <MessageSquare className="mr-2 h-4 w-4" />
+              )}
+              Simpan Catatan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={isConfirmingDelete} onOpenChange={setIsConfirmingDelete}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="h-6 w-6 text-red-600" />
-              Confirm Deletion
+              Konfirmasi Hapus
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              Are you sure you want to delete this transaction?
-              <div className="mt-2 p-2 bg-muted/50 rounded border border-muted">
-                <span className="font-mono text-xs text-foreground">ID: {id}</span>
+            <AlertDialogDescription className="text-[var(--ui-text-muted)] dark:text-zinc-400">
+              Yakin ingin menghapus transaksi ini?
+              <div className="mt-2 rounded border border-[var(--ui-border)] bg-[var(--ui-card-alt)] p-2 dark:border-zinc-800 dark:bg-zinc-900">
+                <span className="font-mono text-xs text-[var(--ui-text)] dark:text-zinc-100">ID: {id}</span>
               </div>
-              <p className="mt-2 text-sm font-medium">This action cannot be undone.</p>
+              <p className="mt-2 text-sm font-medium">Aksi ini tidak bisa dibatalkan.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="border-[var(--ui-border)] bg-[var(--ui-card-alt)] text-[var(--ui-text)] hover:bg-[var(--ui-accent-bg)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+              Batal
+            </AlertDialogCancel>
             <Button onClick={handleDeleteTransaction} className="bg-red-600 text-white hover:bg-red-700">
               <Trash2 className="mr-1.5 h-4 w-4" />
-              Confirm Delete
+              Ya, Hapus
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

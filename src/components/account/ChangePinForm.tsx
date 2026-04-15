@@ -31,6 +31,11 @@ const formSchema = z.object({
 
 type ChangePinFormValues = z.infer<typeof formSchema>;
 
+const themedLabelClass = "flex items-center text-sm font-medium text-[var(--ui-text)] dark:text-zinc-100";
+const themedIconClass = "mr-2 h-4 w-4 text-[var(--ui-text-muted)] dark:text-zinc-400";
+const themedInputClass = "rounded-xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] placeholder:text-[var(--ui-text-secondary)] focus-visible:ring-[var(--ui-accent)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+const primaryButtonClass = "w-full rounded-xl bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent-hover)]";
+
 export default function ChangePinForm() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -80,15 +85,28 @@ export default function ChangePinForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-6 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)]/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/70"
+      >
         <FormField
           control={form.control}
           name="newPin"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="flex items-center"><KeyRound className="mr-2 h-4 w-4 text-muted-foreground" />New 6-Digit PIN</FormLabel>
+              <FormLabel className={themedLabelClass}>
+                <KeyRound className={themedIconClass} />
+                New 6-Digit PIN
+              </FormLabel>
               <FormControl>
-                <Input type="password" placeholder="●●●●●●" {...field} maxLength={6} disabled={isLoading} />
+                <Input
+                  type="password"
+                  placeholder="●●●●●●"
+                  {...field}
+                  maxLength={6}
+                  disabled={isLoading}
+                  className={themedInputClass}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -99,9 +117,19 @@ export default function ChangePinForm() {
           name="confirmNewPin"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="flex items-center"><KeyRound className="mr-2 h-4 w-4 text-muted-foreground" />Confirm New PIN</FormLabel>
+              <FormLabel className={themedLabelClass}>
+                <KeyRound className={themedIconClass} />
+                Confirm New PIN
+              </FormLabel>
               <FormControl>
-                <Input type="password" placeholder="●●●●●●" {...field} maxLength={6} disabled={isLoading} />
+                <Input
+                  type="password"
+                  placeholder="●●●●●●"
+                  {...field}
+                  maxLength={6}
+                  disabled={isLoading}
+                  className={themedInputClass}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -112,15 +140,24 @@ export default function ChangePinForm() {
           name="currentPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="flex items-center"><Lock className="mr-2 h-4 w-4 text-muted-foreground" />Current Account Password</FormLabel>
+              <FormLabel className={themedLabelClass}>
+                <Lock className={themedIconClass} />
+                Current Account Password
+              </FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Enter your account password" {...field} disabled={isLoading} />
+                <Input
+                  type="password"
+                  placeholder="Enter your account password"
+                  {...field}
+                  disabled={isLoading}
+                  className={themedInputClass}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+        <Button type="submit" className={primaryButtonClass} disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Change PIN
         </Button>
