@@ -8,24 +8,14 @@ import { connectToDatabase } from '@/lib/mongodb';
 const { client, db } = await connectToDatabase();
 
 const betterAuthSecret = process.env.BETTER_AUTH_SECRET || process.env.JWT_SECRET || 'development-secret-change-me';
-const appBaseURL =
-  process.env.BETTER_AUTH_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  process.env.NEXT_PUBLIC_BASE_URL ||
-  'https://danayasa.id';
+const configuredAppUrls = [
+  process.env.BETTER_AUTH_URL,
+  process.env.NEXT_PUBLIC_APP_URL,
+  process.env.NEXT_PUBLIC_BASE_URL,
+  'http://localhost:9002',
+].filter((value): value is string => Boolean(value));
 
-const staticTrustedOrigins = Array.from(
-  new Set(
-    [
-      appBaseURL,
-      process.env.BETTER_AUTH_URL,
-      process.env.NEXT_PUBLIC_APP_URL,
-      process.env.NEXT_PUBLIC_BASE_URL,
-      'https://danayasa.id',
-      'https://www.danayasa.id',
-    ].filter((value): value is string => Boolean(value))
-  )
-);
+const appBaseURL = configuredAppUrls[0];
 
 function toOriginCandidate(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -35,6 +25,29 @@ function toOriginCandidate(value: string | null | undefined): string | null {
     return null;
   }
 }
+
+function toHostCandidate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).host;
+  } catch {
+    return null;
+  }
+}
+
+const staticTrustedOrigins = Array.from(
+  new Set(configuredAppUrls.map((value) => toOriginCandidate(value)).filter((value): value is string => Boolean(value)))
+);
+
+const allowedHosts = Array.from(
+  new Set(
+    [
+      ...configuredAppUrls.map((value) => toHostCandidate(value)).filter((value): value is string => Boolean(value)),
+      'localhost:9003',
+      '127.0.0.1:9003',
+    ]
+  )
+);
 
 function getForwardedOrigin(request: Request): string | null {
   const forwardedHostHeader = request.headers.get('x-forwarded-host');
@@ -51,7 +64,7 @@ export const auth = betterAuth({
     baseURL: appBaseURL,
     fallback: appBaseURL,
     allowedHeaders: ['x-forwarded-host', 'x-forwarded-proto', 'host'],
-    allowedHosts: ['danayasa.id', 'www.danayasa.id', 'localhost:9003', '127.0.0.1:9003'],
+    allowedHosts,
   },
   trustedOrigins: async (request) => {
     if (!request) {
