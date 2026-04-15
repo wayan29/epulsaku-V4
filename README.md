@@ -118,26 +118,34 @@ Buka file `.env` dan isi dengan konfigurasi berikut.
 MONGODB_URI="mongodb://localhost:27017"
 MONGODB_DB_NAME="ePulsakuDB"
 
-# Konfigurasi Aplikasi
-# PENTING: Untuk produksi, ganti dengan URL publik aplikasi Anda.
-# Contoh: https://app.domainanda.com
-# Ini digunakan untuk callback webhook dan fungsionalitas lainnya.
+# URL Aplikasi / Auth
+# PENTING: gunakan satu host kanonik yang sama untuk app dan auth di produksi.
+# Contoh produksi: https://app.domainanda.com
+BETTER_AUTH_URL="http://localhost:9002"
+NEXT_PUBLIC_APP_URL="http://localhost:9002"
+# Dipertahankan untuk kompatibilitas kode lama yang masih membaca base URL publik.
 NEXT_PUBLIC_BASE_URL="http://localhost:9002"
 
 # Kunci Keamanan (SANGAT PENTING!)
 # Buat kunci-kunci ini dengan perintah 'openssl rand -hex 32' atau 'openssl rand -hex 64'
 # ENCRYPTION_KEY harus 32 byte (64 karakter hex)
 ENCRYPTION_KEY="<ganti_dengan_kunci_hex_64_karakter_anda>"
-# JWT_SECRET bisa lebih panjang, digunakan untuk token sesi
+# Disarankan diisi khusus untuk Better Auth agar secret sesi tidak bergantung pada fallback.
+BETTER_AUTH_SECRET="<ganti_dengan_secret_better_auth_anda>"
+# Fallback lama untuk token/sesi jika BETTER_AUTH_SECRET belum diisi.
 JWT_SECRET="<ganti_dengan_kunci_random_panjang_anda>"
 
 # Kunci API untuk Google AI (Gemini)
 # Diperlukan untuk fitur seperti "Chat AI Gemini"
 GEMINI_API_KEY="<ganti_dengan_kunci_API_google_ai_anda>"
 
-# Zona Waktu Aplikasi
+# Konfigurasi Dashboard / Zona Waktu
 # Gunakan identifier dari IANA Time Zone Database (e.g., Asia/Jakarta, Asia/Makassar, Asia/Jayapura)
 TIMEZONE="Asia/Makassar"
+# Opsional: set true untuk menampilkan log performa query dashboard di server log.
+LOG_DASHBOARD_PERF="false"
+# Opsional: ambang batas query dashboard lambat dalam milidetik.
+DASHBOARD_SLOW_QUERY_MS="300"
 ```
 
 **Cara Membuat Kunci Keamanan:**
@@ -161,7 +169,9 @@ Jalankan perintah ini di terminal Anda untuk membuat kunci yang aman:
 
 **PENTING:**
 *   Ganti `mongodb://localhost:27017` dengan string koneksi MongoDB Atlas Anda jika menggunakannya.
-*   **Sangat penting untuk mengganti `NEXT_PUBLIC_BASE_URL`** dengan URL domain publik Anda setelah aplikasi di-deploy (misalnya, `https://app.domainanda.com`).
+*   **Sangat penting untuk mengisi `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, dan `NEXT_PUBLIC_BASE_URL`** dengan satu URL domain publik yang sama setelah aplikasi di-deploy (misalnya, `https://app.domainanda.com`).
+*   **Sangat disarankan mengisi `BETTER_AUTH_SECRET`** secara khusus untuk Better Auth agar secret sesi tidak bergantung pada fallback `JWT_SECRET`.
+*   `LOG_DASHBOARD_PERF` dan `DASHBOARD_SLOW_QUERY_MS` bersifat opsional untuk debugging dan tuning performa dashboard.
 *   **JANGAN PERNAH** membagikan atau mempublikasikan isi file `.env` Anda, terutama kunci keamanannya.
 *   Kredensial untuk Digiflazz, TokoVoucher, dan Telegram akan dikelola melalui halaman Admin Settings di aplikasi web setelah admin pertama login, jadi tidak perlu dimasukkan ke dalam `.env`.
 
