@@ -14,26 +14,25 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { UserCircle2, Lock, Zap, Mail, KeyRound, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { createUser } from "@/lib/user-utils";
 
 const formSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
-  pin: z.string().length(6, "PIN must be 6 digits").regex(/^\d+$/, "PIN must be only digits"),
-  confirmPin: z.string().length(6, "PIN must be 6 digits").regex(/^\d+$/, "PIN must be only digits"),
+  username: z.string().min(3, "Username minimal 3 karakter"),
+  email: z.string().email("Format email tidak valid"),
+  password: z.string().min(6, "Password minimal 6 karakter"),
+  confirmPassword: z.string().min(6, "Password minimal 6 karakter"),
+  pin: z.string().length(6, "PIN harus 6 digit").regex(/^\d+$/, "PIN hanya boleh berisi angka"),
+  confirmPin: z.string().length(6, "PIN harus 6 digit").regex(/^\d+$/, "PIN hanya boleh berisi angka"),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
+  message: "Konfirmasi password tidak cocok",
   path: ["confirmPassword"],
 }).refine((data) => data.pin === data.confirmPin, {
-  message: "PINs don't match",
+  message: "Konfirmasi PIN tidak cocok",
   path: ["confirmPin"],
 });
 
@@ -62,44 +61,55 @@ export default function SignupForm() {
         email: values.email,
         passwordPlain: values.password,
         pinPlain: values.pin,
-        // Role is determined server-side
       });
 
       if (result.success) {
         toast({
-          title: "Signup Successful",
-          description: `Welcome, ${result.user?.username}! Your super admin account has been created. Please log in.`,
+          title: "Akun admin awal berhasil dibuat",
+          description: `Selamat datang, ${result.user?.username}. Silakan login untuk mulai menggunakan dashboard.`,
         });
-        router.push('/login');
+        router.push("/login");
       } else {
         toast({
-          title: "Signup Failed",
-          description: result.message || "Could not create your account.",
+          title: "Pembuatan akun gagal",
+          description: result.message || "Akun tidak dapat dibuat.",
           variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Signup error:", error);
       toast({
-        title: "Signup Error",
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        title: "Terjadi kesalahan saat signup",
+        description: error instanceof Error ? error.message : "Terjadi kesalahan yang tidak diketahui.",
         variant: "destructive",
       });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   }
 
   return (
-    <Card className="shadow-xl">
-      <CardHeader className="text-center">
-         <div className="mx-auto mb-4 flex items-center justify-center">
-          <Zap className="h-12 w-12 text-primary" />
+    <div className="overflow-hidden rounded-[24px] border border-[var(--ui-border)] bg-[var(--ui-card)] text-[var(--ui-text)] shadow-[0_24px_70px_rgba(15,23,42,0.10)] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+      <div className="h-1 w-full bg-gradient-to-r from-[var(--ui-top-bar-from)] via-[var(--ui-top-bar-via)] to-[var(--ui-top-bar-to)]" />
+      <div className="px-5 py-6 sm:px-7 sm:py-7">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--ui-accent-gradient-from)] to-[var(--ui-accent-gradient-to)] text-white shadow-md">
+            <Zap className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-secondary)] dark:text-zinc-500">
+              ePulsaku
+            </p>
+            <h1 className="text-xl font-bold tracking-tight text-[var(--ui-text)] dark:text-zinc-100">
+              Setup admin pertama
+            </h1>
+          </div>
         </div>
-        <CardTitle className="text-3xl font-headline">Create Super Admin Account</CardTitle>
-        <CardDescription>Set up the first administrator account for ePulsaku. This user will have all permissions.</CardDescription>
-      </CardHeader>
-      <CardContent>
+
+        <p className="mb-5 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-card-alt)]/70 px-4 py-3 text-sm text-[var(--ui-text-muted)] dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+          Buat akun owner/admin awal untuk mulai menggunakan dashboard internal.
+        </p>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -107,92 +117,175 @@ export default function SignupForm() {
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex items-center"><UserCircle2 className="mr-2 h-4 w-4 text-muted-foreground" />Username</FormLabel>
+                  <FormLabel className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-300">
+                    Username
+                  </FormLabel>
                   <FormControl>
-                    <Input placeholder="youradminusername" {...field} disabled={isLoading} />
+                    <Input
+                      placeholder="Username admin"
+                      autoComplete="username"
+                      {...field}
+                      disabled={isLoading}
+                      className="h-12 rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] shadow-sm focus-visible:ring-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex items-center"><Mail className="mr-2 h-4 w-4 text-muted-foreground" />Email</FormLabel>
+                  <FormLabel className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-300">
+                    Email
+                  </FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="you@example.com" {...field} disabled={isLoading} />
+                    <Input
+                      type="email"
+                      placeholder="admin@perusahaan.com"
+                      autoComplete="email"
+                      {...field}
+                      disabled={isLoading}
+                      className="h-12 rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] shadow-sm focus-visible:ring-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex items-center"><Lock className="mr-2 h-4 w-4 text-muted-foreground" />Password</FormLabel>
+                  <FormLabel className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-300">
+                    Password
+                  </FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      autoComplete="new-password"
+                      {...field}
+                      disabled={isLoading}
+                      className="h-12 rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] shadow-sm focus-visible:ring-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-             <FormField
+
+            <FormField
               control={form.control}
               name="confirmPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex items-center"><Lock className="mr-2 h-4 w-4 text-muted-foreground" />Confirm Password</FormLabel>
+                  <FormLabel className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-300">
+                    Konfirmasi password
+                  </FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
+                    <Input
+                      type="password"
+                      placeholder="Ulangi password"
+                      autoComplete="new-password"
+                      {...field}
+                      disabled={isLoading}
+                      className="h-12 rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] shadow-sm focus-visible:ring-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="pin"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center"><KeyRound className="mr-2 h-4 w-4 text-muted-foreground" />6-Digit Transaction PIN</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="●●●●●●" {...field} maxLength={6} disabled={isLoading} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="pin"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-300">
+                      PIN transaksi
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="6 digit"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        {...field}
+                        maxLength={6}
+                        disabled={isLoading}
+                        className="h-12 rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] shadow-sm focus-visible:ring-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPin"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium text-[var(--ui-text)] dark:text-zinc-300">
+                      Konfirmasi PIN
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="Ulangi PIN"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        {...field}
+                        maxLength={6}
+                        disabled={isLoading}
+                        className="h-12 rounded-2xl border-[var(--ui-input-border)] bg-[var(--ui-input-bg)] text-[var(--ui-text)] shadow-sm focus-visible:ring-[var(--ui-accent)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="min-h-12 w-full rounded-2xl bg-gradient-to-r from-[var(--ui-accent-gradient-to)] to-[var(--ui-accent-gradient-from)] px-4 py-3 text-white shadow-md transition-all duration-300 hover:from-[var(--ui-accent-hover)] hover:to-[var(--ui-accent-gradient-to)] hover:shadow-lg"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Membuat akun...
+                </>
+              ) : (
+                <>
+                  Buat admin pertama
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
               )}
-            />
-            <FormField
-              control={form.control}
-              name="confirmPin"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center"><KeyRound className="mr-2 h-4 w-4 text-muted-foreground" />Confirm PIN</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="●●●●●●" {...field} maxLength={6} disabled={isLoading} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isLoading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
         </Form>
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/login" className="font-medium text-primary hover:text-primary/80">
+
+        <p className="mt-6 text-center text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
+          Sudah punya akun?{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-[var(--ui-accent)] transition-colors hover:text-[var(--ui-accent-hover)]"
+          >
             Login
           </Link>
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

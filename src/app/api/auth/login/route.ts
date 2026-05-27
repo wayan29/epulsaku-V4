@@ -1,14 +1,15 @@
 // src/app/api/auth/login/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import { getUserByUsername, verifyUserPassword, recordLoginSuccess } from '@/lib/user-utils';
+import { trySendLoginTelegramNotification } from '@/lib/notification-utils';
 import { MAX_ATTEMPTS, LOCKOUT_PERIOD_MS, normalizeUserRole, type User } from '@/lib/auth-utils';
 import { repairBetterAuthCredentialAccount, syncLegacyUserToBetterAuth } from '@/lib/better-auth-bridge';
 import { auth } from '@/lib/auth';
 import { z } from 'zod';
 
 const LoginSchema = z.object({
-  username: z.string().min(1, { message: "Username is required." }),
-  password: z.string().min(1, { message: "Password is required." }),
+  username: z.string().min(1, { message: "Username wajib diisi." }),
+  password: z.string().min(1, { message: "Password wajib diisi." }),
   rememberMe: z.boolean().optional(),
 });
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     if (attempt && now < attempt.expiry && attempt.count >= MAX_ATTEMPTS) {
         const timeLeft = Math.ceil((attempt.expiry - now) / 1000);
         return NextResponse.json(
-            { message: `Too many failed login attempts. Please try again in ${timeLeft} seconds.`, lockoutTime: timeLeft }, 
+            { message: `Terlalu banyak percobaan login. Silakan coba lagi dalam ${timeLeft} detik.`, lockoutTime: timeLeft },
             { status: 429 }
         );
     } else if (attempt && now >= attempt.expiry) {
@@ -91,31 +92,28 @@ export async function POST(req: NextRequest) {
     const userFromDb = await getUserByUsername(username);
     if (!userFromDb || !userFromDb.hashedPassword) {
       handleFailedLoginAttempt(ip);
-      return NextResponse.json({ message: 'Invalid username or password.' }, { status: 401 });
+      return NextResponse.json({ message: 'Username atau password tidak valid.' }, { status: 401 });
     }
 
     // Check if user is disabled
     if (userFromDb.isDisabled) {
-        return NextResponse.json({ message: 'Your account has been disabled. Please contact an administrator.' }, { status: 403 }); // 403 Forbidden
+        return NextResponse.json({ message: 'Akun Anda dinonaktifkan. Silakan hubungi administrator.' }, { status: 403 }); // 403 Forbidden
     }
 
     const isPasswordValid = await verifyUserPassword(password, userFromDb.hashedPassword);
     if (!isPasswordValid) {
       handleFailedLoginAttempt(ip);
-      return NextResponse.json({ message: 'Invalid username or password.' }, { status: 401 });
+      return NextResponse.json({ message: 'Username atau password tidak valid.' }, { status: 401 });
     }
     
     // On success, clear any previous failed attempts for this IP
     loginAttempts.delete(ip);
     
-    // Record login activity using headers from the request object
-    const headersList = req.headers;
-    const userAgent = headersList.get('user-agent');
-    await recordLoginSuccess(userFromDb, userAgent, ip);
+    const userAgent = req.headers.get('user-agent');
 
     const normalizedRole = normalizeUserRole(userFromDb.role);
     if (!normalizedRole) {
-      return NextResponse.json({ message: 'Invalid role configuration on this account.' }, { status: 500 });
+      return NextResponse.json({ message: 'Konfigurasi role pada akun ini tidak valid.' }, { status: 500 });
     }
 
     await syncLegacyUserToBetterAuth(userFromDb);
@@ -164,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!betterAuthResponse.ok) {
-      const errorPayload = await betterAuthResponse.json().catch(() => ({ message: 'Login failed.' }));
+      const errorPayload = await betterAuthResponse.json().catch(() => ({ message: 'Login gagal.' }));
       console.error('Better Auth sign-in failed after legacy password verification.', {
         username: userFromDb.username,
         status: betterAuthResponse.status,
@@ -172,16 +170,52 @@ export async function POST(req: NextRequest) {
       });
       handleFailedLoginAttempt(ip);
       return NextResponse.json(
-        { message: errorPayload?.message || 'Invalid username or password.' },
+        { message: errorPayload?.message || 'Username atau password tidak valid.' },
         { status: betterAuthResponse.status || 401 }
       );
     }
 
     const payload = await betterAuthResponse.json().catch(() => null);
+    const requiresTwoFactor = Boolean(payload?.twoFactorRedirect || payload?.twoFactorRequired);
+
+    if (requiresTwoFactor) {
+      const response = NextResponse.json(
+        {
+          success: false,
+          requiresTwoFactor: true,
+          message: 'Masukkan kode autentikator untuk menyelesaikan login.',
+        },
+        {
+          status: betterAuthResponse.status,
+        }
+      );
+
+      const setCookieHeader = betterAuthResponse.headers.get('set-cookie');
+      if (setCookieHeader) {
+        response.headers.set('set-cookie', setCookieHeader);
+      }
+
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      response.headers.set('Pragma', 'no-cache');
+      response.headers.set('Expires', '0');
+
+      return response;
+    }
+
+    await recordLoginSuccess(userFromDb, userAgent, ip);
+    void trySendLoginTelegramNotification({
+      username: userFromDb.username,
+      role: normalizedRole,
+      ipAddress: ip,
+      userAgent,
+      timestamp: new Date(),
+      twoFactorUsed: false,
+    });
+
     const response = NextResponse.json(
       {
         success: true,
-        message: 'Login successful.',
+        message: 'Login berhasil.',
         user: {
           id: userFromDb._id,
           username: userFromDb.username,
@@ -209,8 +243,8 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('API Login Error:', error);
     if (error instanceof SyntaxError) {
-      return NextResponse.json({ message: 'Invalid JSON body.' }, { status: 400 });
+      return NextResponse.json({ message: 'Body JSON tidak valid.' }, { status: 400 });
     }
-    return NextResponse.json({ message: 'An internal server error occurred.' }, { status: 500 });
+    return NextResponse.json({ message: 'Terjadi kesalahan internal pada server.' }, { status: 500 });
   }
 }

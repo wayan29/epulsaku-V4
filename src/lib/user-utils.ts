@@ -1,7 +1,7 @@
 // src/lib/user-utils.ts
 'use server';
 
-import { readDb, writeDb } from './mongodb';
+import { connectToDatabase, readDb, writeDb } from './mongodb';
 import bcrypt from 'bcryptjs';
 import type { StoredUser, User, UserRole, LoginActivity, UserUpdatePayload } from './auth-utils';
 export type { StoredUser, LoginActivity } from './auth-utils';
@@ -10,9 +10,8 @@ import type { UiThemeName } from './ui-theme';
 import { isUiThemeName } from './ui-theme';
 import { subDays } from 'date-fns';
 import { trySendTelegramNotification } from './notification-utils';
-import type { ObjectId } from 'mongodb';
 import { verifyAuth } from '@/app/api/auth/actions';
-import { syncLegacyUserByIdToBetterAuth } from '@/lib/better-auth-bridge';
+import { findBetterAuthUserByUsername, syncLegacyUserByIdToBetterAuth } from '@/lib/better-auth-bridge';
 
 // Helper to make user objects serializable for client components
 const makeUserSerializable = (user: any): StoredUser => {
@@ -142,25 +141,25 @@ export async function createUser({
       finalRole = 'super_admin';
     } else {
        if (!creatorId) {
-        return { success: false, message: "Creator ID is required to create a new user." };
+        return { success: false, message: "Creator ID wajib ada untuk membuat user baru." };
       }
       const creator = await getActingUserFromSession(creatorId);
       if (!creator || !canManageUsers(creator)) {
-         return { success: false, message: "Permission denied. Your account cannot create users." };
+         return { success: false, message: "Akun Anda tidak memiliki izin untuk membuat user baru." };
       }
       if (!role || (role !== 'admin' && role !== 'staf')) {
-        return { success: false, message: "A valid role ('admin' or 'staf') must be assigned by the super_admin." };
+        return { success: false, message: "Role yang valid ('admin' atau 'staf') harus dipilih oleh super admin." };
       }
-      
+
       if (!adminPasswordConfirmation) {
-        return { success: false, message: "Your admin password is required to create a new user." };
+        return { success: false, message: "Password admin wajib diisi untuk membuat user baru." };
       }
       if (!creator.hashedPassword) {
-        return { success: false, message: "Creator account has no password set." };
+        return { success: false, message: "Akun pembuat tidak memiliki password yang tersimpan." };
       }
       const isPasswordValid = await verifyUserPassword(adminPasswordConfirmation, creator.hashedPassword);
       if (!isPasswordValid) {
-        return { success: false, message: "Incorrect admin password. User creation failed." };
+        return { success: false, message: "Password admin salah. Pembuatan user dibatalkan." };
       }
 
       finalRole = role;
@@ -168,7 +167,7 @@ export async function createUser({
 
     const existingUser = await getUserByUsername(username);
     if (existingUser) {
-      return { success: false, message: "Username already exists." };
+      return { success: false, message: "Username sudah digunakan." };
     }
 
     const hashedPassword = await bcrypt.hash(passwordPlain, SALT_ROUNDS);
@@ -194,12 +193,12 @@ export async function createUser({
 
     return {
       success: true,
-      message: `User ${username} created successfully with role ${finalRole}.`,
+      message: `User ${username} berhasil dibuat dengan role ${finalRole}.`,
       user: userForToken,
     };
   } catch (error) {
     console.error("Error creating user:", error);
-    const message = error instanceof Error ? error.message : "An unknown error occurred.";
+    const message = error instanceof Error ? error.message : "Terjadi kesalahan yang tidak diketahui.";
     return { success: false, message };
   }
 }
@@ -409,7 +408,7 @@ export async function toggleUserStatus(userIdToToggle: string, adminId: string):
     }
     await writeDb("users", updatePayload, { mode: 'updateOne', query: { _id: userToToggle._id } });
     await syncLegacyUserByIdToBetterAuth(userToToggle._id.toHexString());
-    
+
     trySendTelegramNotification({
         provider: 'System',
         productName: 'Account Security Alert',
@@ -424,6 +423,135 @@ export async function toggleUserStatus(userIdToToggle: string, adminId: string):
     return { success: true, message: `User '${userToToggle.username}' has been ${newDisabledStatus ? 'disabled' : 'enabled'}.` };
   } catch (error) {
     console.error("Error toggling user status:", error);
+    return { success: false, message: error instanceof Error ? error.message : "An unknown error occurred." };
+  }
+}
+
+export async function getCurrentUserTwoFactorStatus(): Promise<{ enabled: boolean; configured: boolean }> {
+  try {
+    const sessionUser = await getActingUserFromSession();
+    if (!sessionUser) {
+      return { enabled: false, configured: false };
+    }
+
+    const betterAuthUser = await findBetterAuthUserByUsername(sessionUser.username);
+    if (!betterAuthUser) {
+      return { enabled: false, configured: false };
+    }
+
+    const { db } = await connectToDatabase();
+    const configured = await db.collection('twoFactor').countDocuments({
+      $or: [
+        { userId: betterAuthUser._id },
+        { userId: String(betterAuthUser._id) },
+      ],
+    }) > 0;
+
+    return { enabled: betterAuthUser.twoFactorEnabled === true, configured };
+  } catch (error) {
+    console.error("Error fetching current user 2FA status:", error);
+    return { enabled: false, configured: false };
+  }
+}
+
+export async function markCurrentUserTwoFactorEnabled(): Promise<{ success: boolean; message: string }> {
+  try {
+    const sessionUser = await getActingUserFromSession();
+    if (!sessionUser) {
+      return { success: false, message: "Unauthorized." };
+    }
+
+    const betterAuthUser = await findBetterAuthUserByUsername(sessionUser.username);
+    if (!betterAuthUser) {
+      return { success: false, message: "Data Better Auth user tidak ditemukan." };
+    }
+
+    const { db } = await connectToDatabase();
+    const twoFactorRecord = await db.collection('twoFactor').findOne({
+      $or: [
+        { userId: betterAuthUser._id },
+        { userId: String(betterAuthUser._id) },
+      ],
+    });
+
+    if (!twoFactorRecord) {
+      return { success: false, message: "Secret 2FA belum dibuat." };
+    }
+
+    await db.collection('user').updateOne(
+      { _id: betterAuthUser._id },
+      {
+        $set: {
+          twoFactorEnabled: true,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return { success: true, message: "2FA berhasil diaktifkan." };
+  } catch (error) {
+    console.error("Error marking current user 2FA enabled:", error);
+    return { success: false, message: error instanceof Error ? error.message : "An unknown error occurred." };
+  }
+}
+
+export async function resetUserTwoFactor(userIdToReset: string, adminId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const admin = await getActingUserFromSession(adminId);
+    if (!admin || !canManageUsers(admin)) {
+      return { success: false, message: "Permission denied. Your account cannot reset user 2FA." };
+    }
+    if (admin._id === userIdToReset) {
+      return { success: false, message: "Anda tidak dapat reset 2FA akun sendiri dari halaman ini." };
+    }
+
+    const userToReset = await readDb<any>("users", { query: { _id: userIdToReset } });
+    if (!userToReset) {
+      return { success: false, message: "User not found." };
+    }
+    if (isSuperAdminRole(userToReset.role)) {
+      return { success: false, message: "Cannot reset 2FA for the super_admin account." };
+    }
+
+    let betterAuthUser = await findBetterAuthUserByUsername(userToReset.username);
+    if (!betterAuthUser) {
+      betterAuthUser = await syncLegacyUserByIdToBetterAuth(userToReset._id.toHexString());
+    }
+    if (!betterAuthUser) {
+      return { success: false, message: "Data Better Auth user tidak ditemukan." };
+    }
+
+    const { db } = await connectToDatabase();
+    await db.collection('twoFactor').deleteMany({
+      $or: [
+        { userId: betterAuthUser._id },
+        { userId: String(betterAuthUser._id) },
+      ],
+    });
+    await db.collection('user').updateOne(
+      { _id: betterAuthUser._id },
+      {
+        $set: {
+          twoFactorEnabled: false,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    void trySendTelegramNotification({
+      provider: 'System',
+      productName: 'Account Security Alert',
+      status: '2FA Reset',
+      failureReason: `2FA reset by admin: ${admin.username}`,
+      transactedBy: userToReset.username,
+      timestamp: new Date(),
+      refId: `2FA_RESET_${userToReset._id.toHexString()}`,
+      customerNoDisplay: `User: ${userToReset.username}`,
+    });
+
+    return { success: true, message: `2FA user '${userToReset.username}' berhasil dinonaktifkan.` };
+  } catch (error) {
+    console.error("Error resetting user 2FA:", error);
     return { success: false, message: error instanceof Error ? error.message : "An unknown error occurred." };
   }
 }

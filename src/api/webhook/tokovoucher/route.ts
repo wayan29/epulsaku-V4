@@ -88,14 +88,20 @@ export async function POST(request: NextRequest) {
       internalStatus = "Gagal";
     }
 
-    const updateResult = await updateTransactionInDB({
-      id: payload.ref_id,
-      status: internalStatus,
-      serialNumber: payload.sn || undefined, 
-      failureReason: internalStatus === "Gagal" ? (payload.sn || payload.message) : undefined,
-      providerTransactionId: payload.trx_id || undefined,
-      ...(payload.price && { costPrice: payload.price }),
-    });
+    const updateResult = await updateTransactionInDB(
+      {
+        id: payload.ref_id,
+        status: internalStatus,
+        serialNumber: payload.sn || undefined,
+        failureReason: internalStatus === "Gagal" ? (payload.sn || payload.message) : undefined,
+        providerTransactionId: payload.trx_id || undefined,
+        ...(payload.price && { costPrice: payload.price }),
+      },
+      {
+        actorType: 'webhook',
+        source: 'webhook_tokovoucher',
+      }
+    );
 
     if (updateResult.success) {
       console.log(`Transaction ${payload.ref_id} updated successfully via TokoVoucher webhook to status: ${internalStatus}`);

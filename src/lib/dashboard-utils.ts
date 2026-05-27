@@ -911,42 +911,42 @@ function buildKpis(kpiFacet: KpiFacetResponse): DashboardKpi[] {
   }> = [
     {
       key: "today",
-      label: "Today",
-      helper: "Performa transaksi hari ini.",
+      label: "Hari ini",
+      helper: "Performa transaksi pada hari berjalan.",
       currentKey: "todayCurrent",
       previousKey: "todayPrevious",
     },
     {
       key: "yesterday",
-      label: "Yesterday",
-      helper: "Performa transaksi kemarin.",
+      label: "Kemarin",
+      helper: "Performa transaksi pada hari sebelumnya.",
       currentKey: "yesterdayCurrent",
       previousKey: "yesterdayPrevious",
     },
     {
       key: "week",
-      label: "This Week",
+      label: "Minggu ini",
       helper: "Akumulasi transaksi minggu berjalan.",
       currentKey: "weekCurrent",
       previousKey: "weekPrevious",
     },
     {
       key: "month",
-      label: "This Month",
+      label: "Bulan ini",
       helper: "Akumulasi transaksi bulan berjalan.",
       currentKey: "monthCurrent",
       previousKey: "monthPrevious",
     },
     {
       key: "year",
-      label: "This Year",
+      label: "Tahun ini",
       helper: "Akumulasi transaksi tahun berjalan.",
       currentKey: "yearCurrent",
       previousKey: "yearPrevious",
     },
     {
       key: "overall",
-      label: "Overall",
+      label: "Keseluruhan",
       helper: "Seluruh transaksi yang tercatat.",
       currentKey: "overallCurrent",
     },
@@ -989,7 +989,7 @@ function buildHealthCards(
   return [
     {
       key: "success-rate",
-      label: "Success Rate",
+      label: "Rasio sukses",
       value: `${rangeSummary.successRate}%`,
       helper: `${rangeSummary.successCount.toLocaleString("id-ID")} sukses dari ${rangeSummary.transactions.toLocaleString("id-ID")} transaksi`,
       tone:
@@ -1001,7 +1001,7 @@ function buildHealthCards(
     },
     {
       key: "pending-review",
-      label: "Pending Watch",
+      label: "Pantauan pending",
       value: rangeSummary.pendingCount.toLocaleString("id-ID"),
       helper:
         rangeSummary.pendingCount > 0
@@ -1011,28 +1011,28 @@ function buildHealthCards(
     },
     {
       key: "failure-review",
-      label: "Failure Watch",
+      label: "Pantauan gagal",
       value: rangeSummary.failedCount.toLocaleString("id-ID"),
       helper:
         rangeSummary.failedCount > 0
-          ? "Cek provider, input pelanggan, atau retry flow."
-          : "Tidak ada spike transaksi gagal.",
+          ? "Cek provider, input pelanggan, atau alur retry."
+          : "Tidak ada lonjakan transaksi gagal.",
       tone: rangeSummary.failedCount > 5 ? "danger" : "neutral",
     },
     {
       key: "daily-volume",
-      label: "Avg Daily Volume",
+      label: "Rata-rata harian",
       value: formatCompact(rangeSummary.transactions / Math.max(rangeDays, 1)),
       helper: `Rata-rata transaksi harian dalam ${rangeDays} hari.`,
       tone: "accent",
     },
     {
       key: "busiest-window",
-      label: "Busiest Window",
+      label: "Periode tersibuk",
       value: busiestPoint?.label || "Belum ada data",
       helper: busiestPoint
-        ? `${busiestPoint.transactions.toLocaleString("id-ID")} transaksi pada window tersibuk`
-        : "Belum ada transaksi pada range ini.",
+        ? `${busiestPoint.transactions.toLocaleString("id-ID")} transaksi pada periode tersibuk`
+        : "Belum ada transaksi pada rentang ini.",
       tone: "warning",
     },
   ];
@@ -1054,29 +1054,29 @@ function buildHighlights(
   return [
     {
       key: "top-brand",
-      label: "Top Brand",
+      label: "Merek teratas",
       value: topBrand?.name || "Belum ada data",
       helper: topBrand
         ? `${topBrand.transactions.toLocaleString("id-ID")} transaksi, ${formatCurrency(topBrand.profit)} profit`
-        : "Belum ada distribusi brand untuk range ini.",
+        : "Belum ada distribusi merek untuk rentang ini.",
       tone: "accent",
     },
     {
       key: "strongest-provider",
-      label: "Strongest Provider",
+      label: "Provider terkuat",
       value: topProvider?.label || "Belum ada data",
       helper: topProvider
-        ? `${formatCurrency(topProvider.profit)} profit dengan success rate ${topProvider.successRate}%`
-        : "Belum ada provider dominan untuk range ini.",
+        ? `${formatCurrency(topProvider.profit)} profit dengan rasio sukses ${topProvider.successRate}%`
+        : "Belum ada provider dominan untuk rentang ini.",
       tone: "positive",
     },
     {
       key: "busiest-window",
-      label: "Busiest Window",
+      label: "Periode tersibuk",
       value: busiestWindow?.label || "Belum ada data",
       helper: busiestWindow
-        ? `${busiestWindow.transactions.toLocaleString("id-ID")} transaksi pada window tertinggi`
-        : "Belum ada aktivitas pada range ini.",
+        ? `${busiestWindow.transactions.toLocaleString("id-ID")} transaksi pada volume tertinggi`
+        : "Belum ada aktivitas pada rentang ini.",
       tone: "warning",
     },
   ];

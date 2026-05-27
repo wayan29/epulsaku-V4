@@ -11,9 +11,16 @@ import { productIconsMapping } from "@/components/transactions/TransactionItem";
 import { aggregateDb, readDb, writeDb } from './mongodb';
 import { revalidatePath } from 'next/cache';
 import { fetchSingleCustomPriceFromDB } from '@/lib/db-price-settings-utils'; 
-import { endOfDay, startOfDay } from 'date-fns';
+import { addMinutes, endOfDay, startOfDay, subMinutes } from 'date-fns';
 import type { ObjectId } from 'mongodb';
-import { coerceToDate, normalizeDateInput } from '@/lib/date-utils';
+import {
+  CLAIMED_STALE_MINUTES,
+  coerceToDate,
+  FOLLOW_UP_DUE_SOON_MINUTES,
+  normalizeDateInput,
+  PENDING_SLA_BREACH_MINUTES,
+  PENDING_SLA_WARNING_MINUTES,
+} from '@/lib/date-utils';
 import { verifyAuth } from '@/app/api/auth/actions';
 import { getActingUserFromSession } from '@/lib/user-utils';
 import { checkTokoVoucherTransactionStatus } from '@/ai/flows/tokovoucher/checkTokoVoucherTransactionStatus-flow';
@@ -24,6 +31,7 @@ import {
 
 const TRANSACTIONS_DB = "transactions_log";
 const TRANSACTION_INTERNAL_NOTES_DB = "transaction_internal_notes";
+const TRANSACTION_ACTIVITY_EVENTS_DB = "transaction_activity_events";
 const SHIFT_HANDOVERS_DB = "shift_handovers";
 
 const RELEVANT_PULSA_CATEGORIES_UPPER = ["PULSA", "PAKET DATA"];
@@ -31,6 +39,14 @@ const RELEVANT_PLN_CATEGORIES_UPPER = ["PLN", "TOKEN LISTRIK", "TOKEN"];
 const RELEVANT_GAME_CATEGORIES_UPPER = ["GAME", "TOPUP", "VOUCHER GAME", "DIAMOND", "UC"];
 const RELEVANT_EMONEY_CATEGORIES_UPPER = ["E-MONEY", "E-WALLET", "SALDO DIGITAL", "DANA", "OVO", "GOPAY", "SHOPEEPAY", "MAXIM"];
 
+
+export interface TransactionFollowUp {
+  followUpAt: string;
+  note: string;
+  createdAt: string;
+  createdByUserId: string;
+  createdByUsername: string;
+}
 
 export interface Transaction extends TransactionCore {
   iconName: string;
@@ -42,20 +58,25 @@ export interface Transaction extends TransactionCore {
   internalPriority?: TransactionInternalPriority;
   lastInternalNoteAt?: string;
   lastInternalNotePreview?: string;
+  followUp?: TransactionFollowUp | null;
+  latestActivityPreview?: TransactionTimelineItem[];
 }
 
-export type TransactionOperationalFilter = 'all' | 'unclaimed' | 'mine' | 'others' | 'handover';
+export type TransactionOperationalFilter = 'all' | 'unclaimed' | 'mine' | 'others' | 'handover' | 'followup_due' | 'followup_overdue' | 'claimed_stale' | 'my_claimed_stale' | 'my_followup_due' | 'my_followup_overdue';
+export type TransactionPendingAgingFilter = 'all' | 'warning' | 'breached';
 
 export interface TransactionListInput {
   page?: number;
   limit?: number;
   search?: string;
+  transactionIds?: string[];
   category?: string;
   status?: TransactionStatus;
   provider?: 'digiflazz' | 'tokovoucher';
   from?: string;
   to?: string;
   operationalFilter?: TransactionOperationalFilter;
+  pendingAging?: TransactionPendingAgingFilter;
 }
 
 export interface TransactionInternalNote {
@@ -78,6 +99,88 @@ export interface ShiftHandoverRecord {
   acknowledgedAt?: string;
   acknowledgedByUserId?: string;
   acknowledgedByUsername?: string;
+}
+
+export interface ShiftHandoverAcknowledgeSummary {
+  adoptedCount: number;
+  alreadyMineCount: number;
+  resolvedCount: number;
+  blockedCount: number;
+}
+
+export interface ShiftHandoverResolutionItem {
+  transactionId: string;
+  productName?: string;
+  details?: string;
+  status?: TransactionStatus;
+  claimedByUsername?: string;
+  timestamp?: string;
+}
+
+export interface ShiftHandoverAcknowledgeDetails {
+  adopted: ShiftHandoverResolutionItem[];
+  alreadyMine: ShiftHandoverResolutionItem[];
+  resolved: ShiftHandoverResolutionItem[];
+  blocked: ShiftHandoverResolutionItem[];
+}
+
+export type TransactionActivityEventType =
+  | 'claimed'
+  | 'unclaimed'
+  | 'internal_note_added'
+  | 'status_changed'
+  | 'handover_marked'
+  | 'handover_acknowledged'
+  | 'follow_up_set'
+  | 'follow_up_cleared'
+  | 'deleted';
+
+export type TransactionActivityActorType = 'user' | 'webhook' | 'system';
+
+export interface TransactionActivityEvent {
+  _id?: string;
+  transactionId: string;
+  type: TransactionActivityEventType;
+  createdAt: string;
+  actorType: TransactionActivityActorType;
+  actorUserId?: string;
+  actorUsername?: string;
+  source?: string;
+  summary: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TransactionTimelineItem {
+  id: string;
+  transactionId: string;
+  type: TransactionActivityEventType | 'legacy_note';
+  createdAt: string;
+  actorType: TransactionActivityActorType | 'user';
+  actorUserId?: string;
+  actorUsername?: string;
+  source?: string;
+  summary: string;
+  note?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface AppendTransactionActivityEventInput {
+  transactionId: string;
+  type: TransactionActivityEventType;
+  createdAt?: string;
+  actorType: TransactionActivityActorType;
+  actorUserId?: string;
+  actorUsername?: string;
+  source?: string;
+  summary: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface TransactionStatusChangeActivityContext {
+  actorType: TransactionActivityActorType;
+  actorUserId?: string;
+  actorUsername?: string;
+  source?: string;
 }
 
 export interface TransactionListResponse {
@@ -143,6 +246,7 @@ const transactionListProjection = {
   internalPriority: 1,
   lastInternalNoteAt: 1,
   lastInternalNotePreview: 1,
+  followUp: 1,
 } as const;
 
 function determineTransactionCategoryDetails(
@@ -236,6 +340,14 @@ function buildTransactionListQuery(
 ): Record<string, unknown> {
   const query: Record<string, unknown> = {};
 
+  const normalizedTransactionIds = Array.from(
+    new Set((input?.transactionIds || []).map((id) => id.trim()).filter(Boolean))
+  );
+
+  if (normalizedTransactionIds.length > 0) {
+    query.id = { $in: normalizedTransactionIds };
+  }
+
   if (input?.category) {
     query.categoryKey = input.category;
   }
@@ -266,6 +378,115 @@ function buildTransactionListQuery(
   if (input?.operationalFilter === 'handover') {
     query.status = 'Pending';
     query.internalPriority = 'handover';
+  }
+
+  if (input?.operationalFilter === 'followup_due') {
+    query.status = 'Pending';
+    query['followUp.followUpAt'] = {
+      $gte: new Date().toISOString(),
+      $lte: addMinutes(new Date(), FOLLOW_UP_DUE_SOON_MINUTES).toISOString(),
+    };
+  }
+
+  if (input?.operationalFilter === 'my_followup_due' && userContext?.userId) {
+    query.status = 'Pending';
+    query.claimedByUserId = userContext.userId;
+    query['followUp.followUpAt'] = {
+      $gte: new Date().toISOString(),
+      $lte: addMinutes(new Date(), FOLLOW_UP_DUE_SOON_MINUTES).toISOString(),
+    };
+  }
+
+  if (input?.operationalFilter === 'followup_overdue') {
+    query.status = 'Pending';
+    query['followUp.followUpAt'] = {
+      $lt: new Date().toISOString(),
+      $gt: '',
+    };
+  }
+
+  if (input?.operationalFilter === 'my_followup_overdue' && userContext?.userId) {
+    query.status = 'Pending';
+    query.claimedByUserId = userContext.userId;
+    query['followUp.followUpAt'] = {
+      $lt: new Date().toISOString(),
+      $gt: '',
+    };
+  }
+
+  if (input?.operationalFilter === 'claimed_stale') {
+    const staleCutoff = subMinutes(new Date(), CLAIMED_STALE_MINUTES).toISOString();
+
+    query.status = 'Pending';
+    query.claimedByUserId = { $nin: [null, ''] };
+    query.claimedAt = {
+      $lte: staleCutoff,
+      $gt: '',
+    };
+    query.$and = [
+      {
+        $or: [
+          { lastInternalNoteAt: { $exists: false } },
+          { lastInternalNoteAt: { $in: [null, ''] } },
+          { lastInternalNoteAt: { $lte: staleCutoff, $gt: '' } },
+        ],
+      },
+      {
+        $or: [
+          { 'followUp.createdAt': { $exists: false } },
+          { 'followUp.createdAt': { $in: [null, ''] } },
+          { 'followUp.createdAt': { $lte: staleCutoff, $gt: '' } },
+        ],
+      },
+    ];
+  }
+
+  if (input?.operationalFilter === 'my_claimed_stale' && userContext?.userId) {
+    const staleCutoff = subMinutes(new Date(), CLAIMED_STALE_MINUTES).toISOString();
+
+    query.status = 'Pending';
+    query.claimedByUserId = userContext.userId;
+    query.claimedAt = {
+      $lte: staleCutoff,
+      $gt: '',
+    };
+    query.$and = [
+      {
+        $or: [
+          { lastInternalNoteAt: { $exists: false } },
+          { lastInternalNoteAt: { $in: [null, ''] } },
+          { lastInternalNoteAt: { $lte: staleCutoff, $gt: '' } },
+        ],
+      },
+      {
+        $or: [
+          { 'followUp.createdAt': { $exists: false } },
+          { 'followUp.createdAt': { $in: [null, ''] } },
+          { 'followUp.createdAt': { $lte: staleCutoff, $gt: '' } },
+        ],
+      },
+    ];
+  }
+
+  if (input?.pendingAging && input.pendingAging !== 'all') {
+    query.status = 'Pending';
+
+    const now = new Date();
+    const breachCutoff = subMinutes(now, PENDING_SLA_BREACH_MINUTES);
+
+    if (input.pendingAging === 'breached') {
+      query.timestampDate = {
+        $lte: breachCutoff,
+      };
+    }
+
+    if (input.pendingAging === 'warning') {
+      const warningCutoff = subMinutes(now, PENDING_SLA_WARNING_MINUTES);
+      query.timestampDate = {
+        $lte: warningCutoff,
+        $gt: breachCutoff,
+      };
+    }
   }
 
   if (input?.from) {
@@ -322,8 +543,85 @@ const makeTransactionSerializable = (tx: any): Transaction => {
   }
 
   serializableTx.timestamp = normalizeStoredTimestamp(serializableTx.timestamp);
+
+  if (serializableTx.followUp) {
+    serializableTx.followUp = {
+      ...serializableTx.followUp,
+      followUpAt: normalizeStoredTimestamp(serializableTx.followUp.followUpAt),
+      createdAt: normalizeStoredTimestamp(serializableTx.followUp.createdAt),
+    };
+  }
+
   return serializableTx as Transaction;
 };
+
+async function appendTransactionActivityEvent(
+  input: AppendTransactionActivityEventInput
+): Promise<void> {
+  const createdAt = normalizeStoredTimestamp(input.createdAt || new Date().toISOString());
+  const event: TransactionActivityEvent = {
+    transactionId: input.transactionId,
+    type: input.type,
+    createdAt,
+    actorType: input.actorType,
+    actorUserId: input.actorUserId,
+    actorUsername: input.actorUsername,
+    source: input.source,
+    summary: input.summary.trim(),
+    metadata: input.metadata,
+  };
+
+  await writeDb(TRANSACTION_ACTIVITY_EVENTS_DB, event, { mode: 'insertOne' });
+}
+
+function buildStatusChangedSummary(
+  previousStatus: TransactionStatus,
+  nextStatus: TransactionStatus,
+  context: TransactionStatusChangeActivityContext
+): string {
+  if (context.source === 'webhook_digiflazz') {
+    return `Digiflazz webhook memperbarui status ${previousStatus} → ${nextStatus}.`;
+  }
+
+  if (context.source === 'webhook_tokovoucher') {
+    return `TokoVoucher webhook memperbarui status ${previousStatus} → ${nextStatus}.`;
+  }
+
+  if (context.source === 'manual_refresh') {
+    return `Refresh manual memperbarui status ${previousStatus} → ${nextStatus}.`;
+  }
+
+  if (context.actorUsername) {
+    return `${context.actorUsername} mengubah status ${previousStatus} → ${nextStatus}.`;
+  }
+
+  return `Status diubah dari ${previousStatus} ke ${nextStatus}.`;
+}
+
+async function appendStatusChangedActivityEvent(
+  transactionId: string,
+  previousStatus: TransactionStatus,
+  nextStatus: TransactionStatus,
+  context: TransactionStatusChangeActivityContext
+): Promise<void> {
+  if (previousStatus === nextStatus) {
+    return;
+  }
+
+  await appendTransactionActivityEvent({
+    transactionId,
+    type: 'status_changed',
+    actorType: context.actorType,
+    actorUserId: context.actorUserId,
+    actorUsername: context.actorUsername,
+    source: context.source,
+    summary: buildStatusChangedSummary(previousStatus, nextStatus, context),
+    metadata: {
+      previousStatus,
+      nextStatus,
+    },
+  });
+}
 
 async function buildTransactionUpdatePayload(
   existingTransaction: Transaction,
@@ -342,6 +640,7 @@ async function buildTransactionUpdatePayload(
     (updatedTxData.status === "Sukses" || updatedTxData.status === "Gagal")
   ) {
     Object.assign(updatePayload, buildTransactionDateFields(new Date()));
+    updatePayload.followUp = null;
   }
 
   if (
@@ -429,6 +728,38 @@ function normalizeInternalPriority(
   return value === 'handover' ? 'handover' : 'normal';
 }
 
+function sanitizeFollowUpNote(note: string): string {
+  return note.trim().replace(/\s+/g, ' ').slice(0, 160);
+}
+
+function buildShiftHandoverAcknowledgeMessage(
+  summary: ShiftHandoverAcknowledgeSummary
+): string {
+  const parts: string[] = [];
+
+  if (summary.adoptedCount > 0) {
+    parts.push(`${summary.adoptedCount} transaksi masuk ke antrean saya`);
+  }
+
+  if (summary.alreadyMineCount > 0) {
+    parts.push(`${summary.alreadyMineCount} transaksi sudah menjadi antrean saya`);
+  }
+
+  if (summary.resolvedCount > 0) {
+    parts.push(`${summary.resolvedCount} transaksi sudah tidak pending`);
+  }
+
+  if (summary.blockedCount > 0) {
+    parts.push(`${summary.blockedCount} transaksi masih dipegang staf lain`);
+  }
+
+  if (parts.length === 0) {
+    return 'Handover diterima, tetapi tidak ada transaksi yang perlu dipindahkan.';
+  }
+
+  return `Handover diterima: ${parts.join(', ')}.`;
+}
+
 async function getTransactionAccessContext() {
   await assertTransactionHistoryAccess();
   const sessionUser = await getActingUserFromSession();
@@ -465,14 +796,29 @@ export async function claimTransactionInDB(
       };
     }
 
+    const claimedAt = new Date().toISOString();
     await persistTransactionUpdate(
       { id: transactionId, status: 'Pending' },
       {
         claimedByUserId: sessionUser._id,
         claimedByUsername: sessionUser.username,
-        claimedAt: new Date().toISOString(),
+        claimedAt,
       }
     );
+    await appendTransactionActivityEvent({
+      transactionId,
+      type: 'claimed',
+      createdAt: claimedAt,
+      actorType: 'user',
+      actorUserId: sessionUser._id,
+      actorUsername: sessionUser.username,
+      source: 'ui',
+      summary: `${sessionUser.username} mulai menangani transaksi pending.`,
+      metadata: {
+        claimedByUserId: sessionUser._id,
+        claimedByUsername: sessionUser.username,
+      },
+    });
 
     return { success: true, message: 'Transaction claimed successfully.' };
   } catch (error) {
@@ -510,6 +856,8 @@ export async function unclaimTransactionInDB(
       };
     }
 
+    const releasedAt = new Date().toISOString();
+    const releasedFrom = existingTransaction.claimedByUsername || 'staff';
     await persistTransactionUpdate(
       { id: transactionId },
       {
@@ -518,6 +866,20 @@ export async function unclaimTransactionInDB(
         claimedAt: '',
       }
     );
+    await appendTransactionActivityEvent({
+      transactionId,
+      type: 'unclaimed',
+      createdAt: releasedAt,
+      actorType: 'user',
+      actorUserId: sessionUser._id,
+      actorUsername: sessionUser.username,
+      source: 'ui',
+      summary: `${sessionUser.username} melepas penanganan transaksi.`,
+      metadata: {
+        previousClaimedByUserId: existingTransaction.claimedByUserId,
+        previousClaimedByUsername: existingTransaction.claimedByUsername,
+      },
+    });
 
     return { success: true, message: 'Transaction claim released.' };
   } catch (error) {
@@ -566,12 +928,149 @@ export async function addTransactionInternalNoteInDB(
         internalPriority: normalizedPriority,
       }
     );
+    await appendTransactionActivityEvent({
+      transactionId,
+      type: 'internal_note_added',
+      createdAt,
+      actorType: 'user',
+      actorUserId: sessionUser._id,
+      actorUsername: sessionUser.username,
+      source: normalizedPriority === 'handover' ? 'shift_handover' : 'ui',
+      summary:
+        normalizedPriority === 'handover'
+          ? `${sessionUser.username} menambahkan catatan untuk sif berikutnya.`
+          : `${sessionUser.username} menambahkan catatan operasional.`,
+      metadata: {
+        note: sanitizedNote,
+        priority: normalizedPriority,
+      },
+    });
 
     return { success: true, message: 'Internal note saved.' };
   } catch (error) {
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Failed to save internal note.',
+    };
+  }
+}
+
+export async function setTransactionFollowUpInDB(input: {
+  transactionId: string;
+  dueAt: string;
+  note: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const sessionUser = await getTransactionAccessContext();
+    const existingTransaction = await getTransactionByIdFromDB(input.transactionId);
+    const sanitizedNote = sanitizeFollowUpNote(input.note);
+    const normalizedDueAt = normalizeStoredTimestamp(input.dueAt);
+
+    if (!existingTransaction) {
+      return { success: false, message: 'Transaction not found.' };
+    }
+
+    if (existingTransaction.status !== 'Pending') {
+      return { success: false, message: 'Only pending transactions can have follow-up reminders.' };
+    }
+
+    if (!normalizedDueAt) {
+      return { success: false, message: 'Follow-up time is invalid.' };
+    }
+
+    if (new Date(normalizedDueAt).getTime() <= Date.now()) {
+      return { success: false, message: 'Follow-up time must be in the future.' };
+    }
+
+    if (!sanitizedNote) {
+      return { success: false, message: 'Follow-up note cannot be empty.' };
+    }
+
+    const createdAt = new Date().toISOString();
+    const followUp: TransactionFollowUp = {
+      followUpAt: normalizedDueAt,
+      note: sanitizedNote,
+      createdAt,
+      createdByUserId: sessionUser._id,
+      createdByUsername: sessionUser.username,
+    };
+
+    await persistTransactionUpdate(
+      { id: input.transactionId, status: 'Pending' },
+      {
+        followUp,
+      }
+    );
+
+    await appendTransactionActivityEvent({
+      transactionId: input.transactionId,
+      type: 'follow_up_set',
+      createdAt,
+      actorType: 'user',
+      actorUserId: sessionUser._id,
+      actorUsername: sessionUser.username,
+      source: 'ui',
+      summary: `${sessionUser.username} menetapkan follow-up transaksi.`,
+      metadata: {
+        note: sanitizedNote,
+        followUpAt: normalizedDueAt,
+      },
+    });
+
+    return { success: true, message: 'Follow-up reminder saved.' };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to save follow-up reminder.',
+    };
+  }
+}
+
+export async function clearTransactionFollowUpInDB(
+  transactionId: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const sessionUser = await getTransactionAccessContext();
+    const existingTransaction = await getTransactionByIdFromDB(transactionId);
+
+    if (!existingTransaction) {
+      return { success: false, message: 'Transaction not found.' };
+    }
+
+    if (!existingTransaction.followUp?.followUpAt) {
+      return { success: false, message: 'Transaction does not have an active follow-up reminder.' };
+    }
+
+    const clearedAt = new Date().toISOString();
+
+    await persistTransactionUpdate(
+      { id: transactionId },
+      {
+        followUp: null,
+      }
+    );
+
+    await appendTransactionActivityEvent({
+      transactionId,
+      type: 'follow_up_cleared',
+      createdAt: clearedAt,
+      actorType: 'user',
+      actorUserId: sessionUser._id,
+      actorUsername: sessionUser.username,
+      source: 'ui',
+      summary: `${sessionUser.username} menyelesaikan follow-up transaksi.`,
+      metadata: {
+        note: existingTransaction.followUp.note,
+        followUpAt: existingTransaction.followUp.followUpAt,
+        followUpCreatedByUsername: existingTransaction.followUp.createdByUsername,
+      },
+    });
+
+    return { success: true, message: 'Follow-up reminder cleared.' };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to clear follow-up reminder.',
     };
   }
 }
@@ -591,6 +1090,94 @@ export async function listTransactionInternalNotesFromDB(
     _id: note._id && typeof note._id !== 'string' ? note._id.toHexString() : note._id,
     createdAt: normalizeStoredTimestamp(note.createdAt),
   }));
+}
+
+export async function listTransactionActivityTimelineFromDB(
+  transactionId: string
+): Promise<TransactionTimelineItem[]> {
+  await getTransactionAccessContext();
+
+  const [events, notes] = await Promise.all([
+    readDb<any[]>(TRANSACTION_ACTIVITY_EVENTS_DB, {
+      query: { transactionId },
+      options: { sort: { createdAt: -1, _id: -1 } },
+    }),
+    readDb<any[]>(TRANSACTION_INTERNAL_NOTES_DB, {
+      query: { transactionId },
+      options: { sort: { createdAt: -1, _id: -1 } },
+    }),
+  ]);
+
+  const eventItems: TransactionTimelineItem[] = events.map((event) => ({
+    id:
+      event._id && typeof event._id !== 'string'
+        ? event._id.toHexString()
+        : String(event._id || `${event.transactionId}-${event.createdAt}-${event.type}`),
+    transactionId: event.transactionId,
+    type: event.type,
+    createdAt: normalizeStoredTimestamp(event.createdAt),
+    actorType: event.actorType,
+    actorUserId: event.actorUserId,
+    actorUsername: event.actorUsername,
+    source: event.source,
+    summary: event.summary,
+    note:
+      event.metadata && typeof event.metadata.note === 'string'
+        ? event.metadata.note
+        : event.metadata && typeof event.metadata.handoverSummary === 'string'
+          ? event.metadata.handoverSummary
+          : undefined,
+    metadata: event.metadata,
+  }));
+
+  const activityNoteKeys = new Set(
+    events
+      .filter((event) => event.type === 'internal_note_added')
+      .map((event) => {
+        const normalizedCreatedAt = normalizeStoredTimestamp(event.createdAt);
+        const activityNote =
+          event.metadata && typeof event.metadata.note === 'string'
+            ? event.metadata.note
+            : '';
+
+        return `${normalizedCreatedAt}::${event.actorUserId || ''}::${activityNote}`;
+      })
+  );
+
+  const legacyNoteItems: TransactionTimelineItem[] = notes
+    .filter((note) => {
+      const noteKey = `${normalizeStoredTimestamp(note.createdAt)}::${note.createdByUserId || ''}::${note.note || ''}`;
+      return !activityNoteKeys.has(noteKey);
+    })
+    .map((note) => ({
+      id:
+        note._id && typeof note._id !== 'string'
+          ? note._id.toHexString()
+          : `legacy-note-${note.transactionId}-${note.createdAt}`,
+      transactionId: note.transactionId,
+      type: 'legacy_note',
+      createdAt: normalizeStoredTimestamp(note.createdAt),
+      actorType: 'user',
+      actorUserId: note.createdByUserId,
+      actorUsername: note.createdByUsername,
+      source: 'legacy_note',
+      summary: `${note.createdByUsername || 'Staff'} menambahkan catatan internal.`,
+      note: note.note,
+      metadata: {
+        migratedFromLegacyNotes: true,
+      },
+    }));
+
+  return [...eventItems, ...legacyNoteItems].sort((left, right) => {
+    const leftTime = new Date(left.createdAt).getTime();
+    const rightTime = new Date(right.createdAt).getTime();
+
+    if (leftTime === rightTime) {
+      return left.id < right.id ? 1 : -1;
+    }
+
+    return rightTime - leftTime;
+  });
 }
 
 export async function createShiftHandoverInDB(input: {
@@ -628,6 +1215,20 @@ export async function createShiftHandoverInDB(input: {
             internalPriority: 'handover',
           }
         );
+        await appendTransactionActivityEvent({
+          transactionId,
+          type: 'handover_marked',
+          createdAt,
+          actorType: 'user',
+          actorUserId: sessionUser._id,
+          actorUsername: sessionUser.username,
+          source: 'shift_handover',
+          summary: `${sessionUser.username} menandai transaksi untuk handover sif berikutnya.`,
+          metadata: {
+            handoverSummary: summary,
+            handoverCreatedByUsername: sessionUser.username,
+          },
+        });
       }
     }
 
@@ -658,7 +1259,12 @@ export async function listShiftHandoversFromDB(): Promise<ShiftHandoverRecord[]>
 
 export async function acknowledgeShiftHandoverInDB(
   handoverId: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{
+  success: boolean;
+  message: string;
+  summary?: ShiftHandoverAcknowledgeSummary;
+  details?: ShiftHandoverAcknowledgeDetails;
+}> {
   try {
     const sessionUser = await getTransactionAccessContext();
     const existingHandover = await readDb<any>(SHIFT_HANDOVERS_DB, { query: { _id: handoverId } });
@@ -671,19 +1277,162 @@ export async function acknowledgeShiftHandoverInDB(
       return { success: false, message: 'Shift handover is already acknowledged.' };
     }
 
+    const acknowledgedAt = new Date().toISOString();
     await writeDb(
       SHIFT_HANDOVERS_DB,
       {
         status: 'acknowledged',
-        acknowledgedAt: new Date().toISOString(),
+        acknowledgedAt,
         acknowledgedByUserId: sessionUser._id,
         acknowledgedByUsername: sessionUser.username,
       },
       { mode: 'updateOne', query: { _id: handoverId } }
     );
 
+    const pendingTransactionIds = Array.isArray(existingHandover.pendingTransactionIds)
+      ? existingHandover.pendingTransactionIds.filter(
+          (transactionId: unknown): transactionId is string =>
+            typeof transactionId === 'string' && transactionId.trim().length > 0
+        )
+      : [];
+
+    const summary: ShiftHandoverAcknowledgeSummary = {
+      adoptedCount: 0,
+      alreadyMineCount: 0,
+      resolvedCount: 0,
+      blockedCount: 0,
+    };
+    const details: ShiftHandoverAcknowledgeDetails = {
+      adopted: [],
+      alreadyMine: [],
+      resolved: [],
+      blocked: [],
+    };
+
+    for (const transactionId of pendingTransactionIds) {
+      const transaction = await getTransactionByIdFromDB(transactionId);
+
+      if (!transaction) {
+        summary.resolvedCount += 1;
+        details.resolved.push({ transactionId });
+        continue;
+      }
+
+      if (transaction.status !== 'Pending') {
+        summary.resolvedCount += 1;
+        details.resolved.push({
+          transactionId,
+          productName: transaction.productName,
+          details: transaction.details,
+          status: transaction.status,
+          timestamp: transaction.timestamp,
+        });
+        continue;
+      }
+
+      if (transaction.claimedByUserId && transaction.claimedByUserId !== sessionUser._id) {
+        summary.blockedCount += 1;
+        details.blocked.push({
+          transactionId,
+          productName: transaction.productName,
+          details: transaction.details,
+          claimedByUsername: transaction.claimedByUsername,
+          status: transaction.status,
+          timestamp: transaction.timestamp,
+        });
+        continue;
+      }
+
+      const adoptedFromUnclaimed = !transaction.claimedByUserId;
+
+      if (adoptedFromUnclaimed) {
+        await persistTransactionUpdate(
+          { id: transactionId, status: 'Pending' },
+          {
+            claimedByUserId: sessionUser._id,
+            claimedByUsername: sessionUser.username,
+            claimedAt: acknowledgedAt,
+            internalPriority: 'normal',
+          }
+        );
+        summary.adoptedCount += 1;
+        details.adopted.push({
+          transactionId,
+          productName: transaction.productName,
+          details: transaction.details,
+          claimedByUsername: sessionUser.username,
+          status: transaction.status,
+          timestamp: transaction.timestamp,
+        });
+
+        await appendTransactionActivityEvent({
+          transactionId,
+          type: 'claimed',
+          createdAt: acknowledgedAt,
+          actorType: 'user',
+          actorUserId: sessionUser._id,
+          actorUsername: sessionUser.username,
+          source: 'shift_handover',
+          summary: `${sessionUser.username} mengambil transaksi dari handover sif ke antrean pribadi.`,
+          metadata: {
+            claimedByUserId: sessionUser._id,
+            claimedByUsername: sessionUser.username,
+            handoverSummary:
+              typeof existingHandover.summary === 'string' ? existingHandover.summary : undefined,
+            handoverCreatedByUsername:
+              typeof existingHandover.createdByUsername === 'string'
+                ? existingHandover.createdByUsername
+                : undefined,
+          },
+        });
+      } else {
+        await persistTransactionUpdate(
+          { id: transactionId, status: 'Pending' },
+          {
+            internalPriority: 'normal',
+          }
+        );
+        summary.alreadyMineCount += 1;
+        details.alreadyMine.push({
+          transactionId,
+          productName: transaction.productName,
+          details: transaction.details,
+          claimedByUsername: transaction.claimedByUsername || sessionUser.username,
+          status: transaction.status,
+          timestamp: transaction.timestamp,
+        });
+      }
+
+      await appendTransactionActivityEvent({
+        transactionId,
+        type: 'handover_acknowledged',
+        createdAt: acknowledgedAt,
+        actorType: 'user',
+        actorUserId: sessionUser._id,
+        actorUsername: sessionUser.username,
+        source: 'shift_handover',
+        summary: `${sessionUser.username} mengambil handover transaksi ini untuk ditindaklanjuti.`,
+        metadata: {
+          handoverSummary:
+            typeof existingHandover.summary === 'string' ? existingHandover.summary : undefined,
+          handoverCreatedByUsername:
+            typeof existingHandover.createdByUsername === 'string'
+              ? existingHandover.createdByUsername
+              : undefined,
+          acknowledgedByUsername: sessionUser.username,
+        },
+      });
+    }
+
     revalidatePath('/shift-handover');
-    return { success: true, message: 'Shift handover acknowledged.' };
+    revalidatePath('/transactions');
+    revalidatePath('/dashboard');
+    return {
+      success: true,
+      message: buildShiftHandoverAcknowledgeMessage(summary),
+      summary,
+      details,
+    };
   } catch (error) {
     return {
       success: false,
@@ -772,8 +1521,67 @@ export async function listTransactionsFromDB(
     },
   });
 
+  const transactions = transactionsFromDb.map(makeTransactionSerializable);
+  const transactionIds = transactions.map((transaction) => transaction.id);
+
+  let previewMap = new Map<string, TransactionTimelineItem[]>();
+
+  if (transactionIds.length > 0) {
+    const previewEvents = await readDb<any[]>(TRANSACTION_ACTIVITY_EVENTS_DB, {
+      query: {
+        transactionId: { $in: transactionIds },
+      },
+      options: {
+        sort: { createdAt: -1, _id: -1 },
+      },
+    });
+
+    const groupedPreviewEvents = new Map<string, TransactionTimelineItem[]>();
+
+    for (const event of previewEvents) {
+      const transactionId = typeof event.transactionId === 'string' ? event.transactionId : '';
+      if (!transactionId) {
+        continue;
+      }
+
+      const existingItems = groupedPreviewEvents.get(transactionId) || [];
+      if (existingItems.length >= 2) {
+        continue;
+      }
+
+      existingItems.push({
+        id:
+          event._id && typeof event._id !== 'string'
+            ? event._id.toHexString()
+            : String(event._id || `${transactionId}-${event.createdAt}-${event.type}`),
+        transactionId,
+        type: event.type,
+        createdAt: normalizeStoredTimestamp(event.createdAt),
+        actorType: event.actorType,
+        actorUserId: event.actorUserId,
+        actorUsername: event.actorUsername,
+        source: event.source,
+        summary: event.summary,
+        note:
+          event.metadata && typeof event.metadata.note === 'string'
+            ? event.metadata.note
+            : event.metadata && typeof event.metadata.handoverSummary === 'string'
+              ? event.metadata.handoverSummary
+              : undefined,
+        metadata: event.metadata,
+      });
+
+      groupedPreviewEvents.set(transactionId, existingItems);
+    }
+
+    previewMap = groupedPreviewEvents;
+  }
+
   return {
-    transactions: transactionsFromDb.map(makeTransactionSerializable),
+    transactions: transactions.map((transaction) => ({
+      ...transaction,
+      latestActivityPreview: previewMap.get(transaction.id) || [],
+    })),
     total,
     totalPages,
     page: safePage,
@@ -847,19 +1655,34 @@ export async function getTransactionByIdFromDB(transactionId: string): Promise<T
   }
 }
 
-export async function updateTransactionInDB(updatedTxData: Partial<TransactionCore> & { id: string }): Promise<{ success: boolean, message?: string }> {
+export async function updateTransactionInDB(
+  updatedTxData: Partial<TransactionCore> & { id: string },
+  activityContext?: TransactionStatusChangeActivityContext
+): Promise<{ success: boolean, message?: string }> {
   try {
     const existingTransaction = await getTransactionByIdFromDB(updatedTxData.id);
 
     if (!existingTransaction) {
       return { success: false, message: `Transaction with id ${updatedTxData.id} not found for update.` };
     }
-    
+
     const updatePayload = await buildTransactionUpdatePayload(
       existingTransaction,
       updatedTxData
     );
     await persistTransactionUpdate({ id: updatedTxData.id }, updatePayload);
+
+    if (updatedTxData.status) {
+      await appendStatusChangedActivityEvent(
+        updatedTxData.id,
+        existingTransaction.status,
+        updatedTxData.status,
+        activityContext || {
+          actorType: 'system',
+          source: 'transaction_update',
+        }
+      );
+    }
 
     return { success: true };
   } catch (error) {
@@ -984,6 +1807,18 @@ export async function refreshPendingTransactionsFromDB(
         }
       );
 
+      if (updateResult.success && updateResult.changed) {
+        await appendStatusChangedActivityEvent(
+          transaction.id,
+          transaction.status,
+          providerResult.status,
+          {
+            actorType: 'system',
+            source: 'manual_refresh',
+          }
+        );
+      }
+
       if (!updateResult.success) {
         items.push({
           id: transaction.id,
@@ -1049,9 +1884,30 @@ export async function refreshPendingTransactionsFromDB(
 
 export async function deleteTransactionFromDB(transactionId: string): Promise<{ success: boolean, message?: string }> {
   try {
+    const sessionUser = await getTransactionAccessContext();
+    const existingTransaction = await getTransactionByIdFromDB(transactionId);
+
+    if (!existingTransaction) {
+      return { success: false, message: `Transaction with id ${transactionId} not found for deletion.` };
+    }
+
+    const deletedAt = new Date().toISOString();
     const result = await writeDb(TRANSACTIONS_DB, null, { mode: 'deleteOne', query: { id: transactionId } });
     if (result && result.deletedCount > 0) {
-        revalidatePath('/transactions'); 
+        await appendTransactionActivityEvent({
+          transactionId,
+          type: 'deleted',
+          createdAt: deletedAt,
+          actorType: 'user',
+          actorUserId: sessionUser._id,
+          actorUsername: sessionUser.username,
+          source: 'ui',
+          summary: `${sessionUser.username} menghapus transaksi.`,
+          metadata: {
+            previousStatus: existingTransaction.status,
+          },
+        });
+        revalidatePath('/transactions');
         revalidatePath('/profit-report');
         return { success: true };
     } else {

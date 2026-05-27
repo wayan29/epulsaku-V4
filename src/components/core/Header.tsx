@@ -53,7 +53,7 @@ export default function Header() {
 
   const handleLogout = async () => {
     logout();
-    toast({ title: "Logged Out", description: "You have been successfully logged out." });
+    toast({ title: "Logout berhasil", description: "Sesi akun Anda sudah ditutup dengan aman." });
   };
   
   const hasAccess = (menuKey: string) => {
@@ -145,11 +145,11 @@ export default function Header() {
             >
               <SheetHeader className="relative border-b border-[var(--ui-border)] px-3 py-3 text-left dark:border-zinc-800 sm:px-4 sm:py-4">
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[var(--ui-top-bar-from)] via-[var(--ui-top-bar-via)] to-[var(--ui-top-bar-to)] opacity-80" />
-                <SheetTitle className="flex items-center gap-2.5 pt-2 text-lg font-bold font-headline text-[var(--ui-text)] dark:text-zinc-100 sm:gap-3 sm:text-xl">
+                <SheetTitle className="flex items-center gap-2.5 pt-2 text-lg font-bold tracking-tight text-[var(--ui-text)] dark:text-zinc-100 sm:gap-3 sm:text-xl">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--ui-accent-gradient-from)] to-[var(--ui-accent-gradient-to)] text-white shadow-lg sm:h-10 sm:w-10 sm:rounded-2xl">
                     <Zap className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
-                  ePulsaku Menu
+                  Menu kerja ePulsaku
                 </SheetTitle>
               </SheetHeader>
               
@@ -203,7 +203,7 @@ export default function Header() {
                               className="rounded-xl text-[var(--ui-text-muted)] hover:bg-[var(--ui-accent-bg)] hover:text-[var(--ui-accent)] dark:text-zinc-400"
                             >
                               <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
-                              <span className="sr-only">Account Settings</span>
+                              <span className="sr-only">Pengaturan akun</span>
                            </Button>
                          </Link>
                       </SheetClose>
@@ -212,7 +212,7 @@ export default function Header() {
                    })()}
                   
                     <Button onClick={handleLogout} variant="ghost" className="w-full justify-start rounded-xl px-2.5 py-2 text-sm text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300 sm:px-3 sm:py-2.5">
-                          <LogOut className="mr-2.5 h-4 w-4 sm:mr-3 sm:h-5 sm:w-5" /> Logout
+                          <LogOut className="mr-2.5 h-4 w-4 sm:mr-3 sm:h-5 sm:w-5" /> Keluar
                     </Button>
                 </div>
               )}

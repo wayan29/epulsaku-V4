@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { toNextJsHandler, nextCookies } from 'better-auth/next-js';
+import { twoFactor } from 'better-auth/plugins';
 import { username } from 'better-auth/plugins/username';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
@@ -59,6 +60,7 @@ function getForwardedOrigin(request: Request): string | null {
 }
 
 export const auth = betterAuth({
+  appName: 'ePulsaku',
   database: mongodbAdapter(db, { client, transaction: false }),
   baseURL: {
     baseURL: appBaseURL,
@@ -84,6 +86,7 @@ export const auth = betterAuth({
   plugins: [
     nextCookies(),
     username(),
+    twoFactor(),
   ],
   emailAndPassword: {
     enabled: true,

@@ -5,14 +5,51 @@ import { syncLegacyCredentialsOnSignup } from '@/lib/better-auth-bridge';
 import { z } from 'zod';
 
 const SignupSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  pin: z.string().length(6, "PIN must be 6 digits").regex(/^\d+$/, "PIN must be only digits"),
+  username: z.string().min(3, "Username minimal 3 karakter"),
+  email: z.string().email("Format email tidak valid"),
+  password: z.string().min(6, "Password minimal 6 karakter"),
+  pin: z.string().length(6, "PIN harus 6 digit").regex(/^\d+$/, "PIN hanya boleh berisi angka"),
 });
+
+const SIGNUP_WINDOW_MS = 10 * 60 * 1000;
+const SIGNUP_MAX_ATTEMPTS = 5;
+const signupAttempts = new Map<string, { count: number; expiresAt: number }>();
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || req.headers.get('x-real-ip') || '127.0.0.1';
+}
+
+function checkSignupRateLimit(ip: string): { limited: boolean; retryAfter: number } {
+  const now = Date.now();
+  const attempt = signupAttempts.get(ip);
+
+  if (!attempt || now >= attempt.expiresAt) {
+    signupAttempts.set(ip, { count: 1, expiresAt: now + SIGNUP_WINDOW_MS });
+    return { limited: false, retryAfter: 0 };
+  }
+
+  if (attempt.count >= SIGNUP_MAX_ATTEMPTS) {
+    return { limited: true, retryAfter: Math.ceil((attempt.expiresAt - now) / 1000) };
+  }
+
+  attempt.count += 1;
+  signupAttempts.set(ip, attempt);
+  return { limited: false, retryAfter: 0 };
+}
 
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const rateLimit = checkSignupRateLimit(ip);
+
+  if (rateLimit.limited) {
+    return NextResponse.json(
+      { message: `Terlalu banyak percobaan signup. Silakan coba lagi dalam ${rateLimit.retryAfter} detik.` },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
+  }
+
   try {
     const body = await req.json();
     const parseResult = SignupSchema.safeParse(body);
@@ -42,13 +79,13 @@ export async function POST(req: Request) {
       });
       return NextResponse.json({ success: true, user: result.user });
     } else {
-      return NextResponse.json({ message: result.message || "Could not create account." }, { status: 409 }); // 409 Conflict for existing user
+      return NextResponse.json({ message: result.message || "Akun tidak dapat dibuat." }, { status: 409 }); // 409 Conflict for existing user
     }
   } catch (error) {
     console.error('API Signup Error:', error);
     if (error instanceof SyntaxError) {
-      return NextResponse.json({ message: 'Invalid JSON body.' }, { status: 400 });
+      return NextResponse.json({ message: 'Body JSON tidak valid.' }, { status: 400 });
     }
-    return NextResponse.json({ message: 'An internal server error occurred.' }, { status: 500 });
+    return NextResponse.json({ message: 'Terjadi kesalahan internal pada server.' }, { status: 500 });
   }
 }

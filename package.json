@@ -8,6 +8,12 @@
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
     "start": "next start -p 9003",
+    "test:verification": "HANDOVER_BASE_URL=http://127.0.0.1:9003 playwright test tests/verification/*.spec.js",
+    "test:verification:handover": "npm run test:verification",
+    "test:verification:resolution": "HANDOVER_BASE_URL=http://127.0.0.1:9003 playwright test tests/verification/handover-resolution-panel.spec.js",
+    "test:verification:render": "HANDOVER_BASE_URL=http://127.0.0.1:9003 playwright test tests/verification/handover-render.spec.js",
+    "test:verification:acknowledge": "HANDOVER_BASE_URL=http://127.0.0.1:9003 playwright test tests/verification/handover-acknowledge.spec.js",
+    "test:verification:full-e2e": "HANDOVER_BASE_URL=http://127.0.0.1:9003 playwright test tests/verification/handover-full-e2e.spec.js",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "backfill:user-roles": "node scripts/normalize-user-roles.mjs",
@@ -63,6 +69,7 @@
     "next-pwa": "^5.6.0",
     "next-themes": "^0.3.0",
     "patch-package": "^8.0.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -73,6 +80,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie": "^0.6.0",
     "@types/jsonwebtoken": "^9.0.6",

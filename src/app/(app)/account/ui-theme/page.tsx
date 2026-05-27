@@ -58,10 +58,23 @@ const PREVIEW_MODES: Array<{
   label: string;
   helper: string;
 }> = [
-  { value: "both", label: "Both", helper: "Light + Dark" },
-  { value: "light", label: "Light only", helper: "Preview terang" },
-  { value: "dark", label: "Dark only", helper: "Preview gelap" },
+  { value: "both", label: "Terang + Gelap", helper: "Tampilkan kedua preview" },
+  { value: "light", label: "Hanya terang", helper: "Preview mode terang" },
+  { value: "dark", label: "Hanya gelap", helper: "Preview mode gelap" },
 ];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  Light: "Terang",
+  Dark: "Gelap",
+};
+
+const TRAIT_LABELS: Record<string, string> = {
+  premium: "premium",
+  calm: "rapi",
+  bold: "tegas",
+  operational: "operasional",
+  trusted: "tepercaya",
+};
 
 function getThemeTraits(theme: UiThemeInfo): string[] {
   const tokens = [theme.tagline, theme.style, theme.description, theme.recommendedFor, theme.surface, theme.accent]
@@ -97,6 +110,7 @@ function ThemeScene({
   mode: "light" | "dark";
 }) {
   const palette = mode === "dark" ? theme.darkPreview || theme.preview : theme.preview;
+  const modeLabel = mode === "dark" ? "Preview gelap" : "Preview terang";
 
   return (
     <div
@@ -115,9 +129,7 @@ function ThemeScene({
         <div className="flex items-center gap-2 text-white">
           <div className="h-8 w-8 rounded-xl bg-white/15" />
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
-              {mode === "dark" ? "Dark preview" : "Light preview"}
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">{modeLabel}</div>
             <div className="text-sm font-bold">{theme.label}</div>
           </div>
         </div>
@@ -151,10 +163,10 @@ function ThemeScene({
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: palette.muted }}>
-                Controls
+                Kontrol utama
               </div>
               <div className="text-sm font-semibold" style={{ color: palette.text }}>
-                Form & action preview
+                Preview form & aksi
               </div>
             </div>
             <div
@@ -164,7 +176,7 @@ function ThemeScene({
                 color: palette.accent,
               }}
             >
-              Primary
+              Tombol utama
             </div>
           </div>
 
@@ -177,14 +189,14 @@ function ThemeScene({
                 backgroundColor: palette.bg,
               }}
             >
-              Search transaction, member, or invoice...
+              Cari transaksi, member, atau invoice...
             </div>
             <div className="flex gap-2">
               <div
                 className="flex-1 rounded-xl px-3 py-2.5 text-center text-xs font-semibold text-white"
                 style={{ backgroundColor: palette.accent }}
               >
-                Save Changes
+                Simpan perubahan
               </div>
               <div
                 className="rounded-xl border px-3 py-2.5 text-xs font-medium"
@@ -194,7 +206,7 @@ function ThemeScene({
                   backgroundColor: palette.card,
                 }}
               >
-                Preview
+                Lihat preview
               </div>
             </div>
             <div
@@ -206,7 +218,7 @@ function ThemeScene({
               }}
             >
               <BadgeCheck className="h-3.5 w-3.5" style={{ color: palette.accent }} />
-              <span className="text-[11px] font-medium">Alert, badge, dan action state tetap konsisten.</span>
+              <span className="text-[11px] font-medium">Alert, badge, dan state aksi tetap konsisten.</span>
             </div>
           </div>
         </div>
@@ -396,7 +408,7 @@ export default function UiThemePage() {
       await setUiTheme(themeName);
       const info = UI_THEMES.find((t) => t.name === themeName);
       toast({
-        title: `Tema "${info?.label}" Diterapkan`,
+        title: `Tema "${info?.label}" diterapkan`,
         description: "Tema tampilan akun Anda berhasil diperbarui.",
       });
     } catch (error) {
@@ -446,10 +458,10 @@ export default function UiThemePage() {
                 }}
               >
                 <Star className="h-3.5 w-3.5" />
-                {screenshotMode ? "Screenshot on" : "Screenshot mode"}
+                {screenshotMode ? "Mode screenshot aktif" : "Mode screenshot"}
               </button>
               <Badge className="rounded-full bg-[var(--ui-accent-bg)] px-3 py-1 text-[var(--ui-accent)] hover:bg-[var(--ui-accent-bg-hover)]">
-                <LayoutDashboard className="mr-1 h-3.5 w-3.5" /> Side-by-side preview
+                <LayoutDashboard className="mr-1 h-3.5 w-3.5" /> Preview berdampingan
               </Badge>
               <Badge variant="secondary" className="rounded-full px-3 py-1">
                 <SlidersHorizontal className="mr-1 h-3.5 w-3.5" /> 7 preset pribadi
@@ -462,14 +474,14 @@ export default function UiThemePage() {
           <div className="space-y-4 xl:space-y-5">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="rounded-full bg-[var(--ui-accent-bg)] px-3 py-1 text-[var(--ui-accent)] hover:bg-[var(--ui-accent-bg-hover)]">
-                <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Active Theme
+                <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Tema aktif
               </Badge>
               <Badge variant="outline" className="rounded-full border-[var(--ui-border)] px-3 py-1 text-[var(--ui-text-muted)]">
-                {themeInfo.category}
+                {CATEGORY_LABELS[themeInfo.category] || themeInfo.category}
               </Badge>
               {themeInfo.featured && (
                 <Badge className="rounded-full bg-amber-500 px-3 py-1 text-white hover:bg-amber-500">
-                  <Star className="mr-1 h-3.5 w-3.5" /> Recommended
+                  <Star className="mr-1 h-3.5 w-3.5" /> Unggulan
                 </Badge>
               )}
             </div>
@@ -484,15 +496,15 @@ export default function UiThemePage() {
             <div className="rounded-2xl border px-4 py-4 xl:px-5 xl:py-5" style={{ borderColor: `${themeInfo.preview.muted}20` }}>
               <div className="mb-3 flex items-center gap-2">
                 <BriefcaseBusiness className="h-4 w-4 text-[var(--ui-accent)]" />
-                <div className="text-sm font-semibold text-[var(--ui-text)]">Best use case</div>
+                <div className="text-sm font-semibold text-[var(--ui-text)]">Cocok digunakan untuk</div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border px-3 py-3" style={{ borderColor: `${themeInfo.preview.muted}18` }}>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Ideal product</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Use case utama</div>
                   <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">{themeInfo.recommendedFor}</div>
                 </div>
                 <div className="rounded-2xl border px-3 py-3" style={{ borderColor: `${themeInfo.preview.muted}18` }}>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Visual direction</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Arah visual</div>
                   <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">{themeInfo.style}</div>
                 </div>
               </div>
@@ -500,15 +512,15 @@ export default function UiThemePage() {
 
             <div className="grid gap-3 sm:grid-cols-3 xl:gap-4">
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${themeInfo.preview.muted}20` }}>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Style</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Gaya</div>
                 <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">{themeInfo.style}</div>
               </div>
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${themeInfo.preview.muted}20` }}>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Best for</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Paling cocok</div>
                 <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">{themeInfo.recommendedFor}</div>
               </div>
               <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${themeInfo.preview.muted}20` }}>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Accent</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">Aksen</div>
                 <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">{themeInfo.accent}</div>
               </div>
             </div>
@@ -521,7 +533,7 @@ export default function UiThemePage() {
                     className="rounded-full px-3 py-1 text-xs capitalize text-white"
                     style={{ backgroundColor: themeInfo.preview.accent }}
                   >
-                    {trait}
+                    {TRAIT_LABELS[trait] || trait}
                   </Badge>
                 ))}
               </div>
@@ -565,7 +577,7 @@ export default function UiThemePage() {
                 }}
               >
                 <LayoutDashboard className="h-3.5 w-3.5" />
-                {heroMode === "presentation" ? "Presentation on" : "Presentation mode"}
+                {heroMode === "presentation" ? "Mode presentasi aktif" : "Mode presentasi"}
               </button>
             </div>
 
@@ -583,7 +595,7 @@ export default function UiThemePage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">
-                Quick Apply & Compare
+                Terapkan cepat & bandingkan
               </h3>
               <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
                 Pilih tema pembanding dengan cepat atau terapkan tema unggulan tanpa scroll jauh.
@@ -619,7 +631,7 @@ export default function UiThemePage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between xl:gap-6">
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">
-              Compare Theme
+              Bandingkan tema
             </h3>
             <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
               Bandingkan tema aktif dengan preset lain sebelum menerapkannya ke akun Anda.
@@ -665,10 +677,10 @@ export default function UiThemePage() {
               >
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <Badge className="rounded-full px-3 py-1 text-xs" style={{ backgroundColor: `${theme.preview.accent}18`, color: theme.preview.accent }}>
-                    {isCurrent ? "Current active" : "Compare target"}
+                    {isCurrent ? "Tema aktif sekarang" : "Tema pembanding"}
                   </Badge>
                   <Badge variant="outline" className="rounded-full border px-3 py-1 text-xs" style={{ borderColor: `${theme.preview.muted}25`, color: theme.preview.muted }}>
-                    {theme.category}
+                    {CATEGORY_LABELS[theme.category] || theme.category}
                   </Badge>
                   <span className="text-sm font-semibold" style={{ color: theme.preview.text }}>{theme.label}</span>
                 </div>
@@ -689,10 +701,10 @@ export default function UiThemePage() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between xl:gap-6">
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--ui-text-muted)]">
-                Filter Preset
+                Filter preset
               </h3>
               <p className="mt-1 text-sm text-[var(--ui-text-muted)] dark:text-zinc-400">
-                Tampilkan tema unggulan, light-only, atau dark-first sesuai kebutuhan brand Anda.
+                Tampilkan tema unggulan, hanya terang, atau hanya gelap sesuai kebutuhan visual akun Anda.
               </p>
             </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -710,7 +722,7 @@ export default function UiThemePage() {
                     color: "var(--ui-text)",
                   }}
                 >
-                  <RotateCcw className="h-3.5 w-3.5" /> Reset
+                  <RotateCcw className="h-3.5 w-3.5" /> Reset filter
                 </button>
               )}
             </div>
@@ -725,27 +737,27 @@ export default function UiThemePage() {
             )}
             {searchQuery.trim() && (
               <Badge variant="outline" className="rounded-full border-[var(--ui-border)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
-                Search: {searchQuery.trim()}
+                Pencarian: {searchQuery.trim()}
               </Badge>
             )}
             {activeSort !== "recommended" && (
               <Badge variant="outline" className="rounded-full border-[var(--ui-border)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
-                Sort: {THEME_SORTS.find((sort) => sort.value === activeSort)?.label}
+                Urutan: {THEME_SORTS.find((sort) => sort.value === activeSort)?.label}
               </Badge>
             )}
             {previewMode !== "both" && (
               <Badge variant="outline" className="rounded-full border-[var(--ui-border)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
-                Preview: {PREVIEW_MODES.find((mode) => mode.value === previewMode)?.label}
+                Mode preview: {PREVIEW_MODES.find((mode) => mode.value === previewMode)?.label}
               </Badge>
             )}
             {heroMode === "presentation" && (
               <Badge variant="outline" className="rounded-full border-[var(--ui-border)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
-                Hero: Presentation
+                Hero: Presentasi
               </Badge>
             )}
             {screenshotMode && (
               <Badge variant="outline" className="rounded-full border-[var(--ui-border)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
-                Screenshot: On
+                Screenshot: Aktif
               </Badge>
             )}
           </div>
@@ -892,11 +904,11 @@ export default function UiThemePage() {
                       color: theme.preview.muted,
                     }}
                   >
-                    {theme.category}
+                    {CATEGORY_LABELS[theme.category] || theme.category}
                   </Badge>
                   {theme.featured && (
                     <Badge className="rounded-full bg-amber-500 px-2 py-0 text-[10px] font-semibold uppercase tracking-wider text-white hover:bg-amber-500">
-                      <Star className="mr-1 h-3 w-3" /> Recommended
+                      <Star className="mr-1 h-3 w-3" /> Unggulan
                     </Badge>
                   )}
                 </div>
@@ -913,7 +925,7 @@ export default function UiThemePage() {
                         className="rounded-full px-2 py-0 text-[10px] font-semibold uppercase tracking-wider text-white"
                         style={{ backgroundColor: theme.preview.accent }}
                       >
-                        {trait}
+                        {TRAIT_LABELS[trait] || trait}
                       </Badge>
                     ))}
                   </div>
@@ -921,11 +933,11 @@ export default function UiThemePage() {
 
                 <div className="mb-2.5 grid gap-2 text-[11px] sm:grid-cols-2">
                   <div className="rounded-2xl border px-3 py-2" style={{ borderColor: `${theme.preview.muted}20`, color: theme.preview.text }}>
-                    <div className="mb-1 font-semibold" style={{ color: theme.preview.text }}>Style</div>
+                    <div className="mb-1 font-semibold" style={{ color: theme.preview.text }}>Gaya</div>
                     <div style={{ color: theme.preview.muted }}>{theme.style}</div>
                   </div>
                   <div className="rounded-2xl border px-3 py-2" style={{ borderColor: `${theme.preview.muted}20`, color: theme.preview.text }}>
-                    <div className="mb-1 font-semibold" style={{ color: theme.preview.text }}>Recommended for</div>
+                    <div className="mb-1 font-semibold" style={{ color: theme.preview.text }}>Direkomendasikan untuk</div>
                     <div style={{ color: theme.preview.muted }}>{theme.recommendedFor}</div>
                   </div>
                 </div>
@@ -933,7 +945,7 @@ export default function UiThemePage() {
                 <div className="mb-2.5 flex flex-col gap-2.5 rounded-2xl border px-3 py-2 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: `${theme.preview.muted}20` }}>
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: theme.preview.muted }}>
-                      Palette
+                      Palet warna
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {[
@@ -951,7 +963,7 @@ export default function UiThemePage() {
                           }}
                           className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-all hover:-translate-y-0.5 hover:shadow-sm"
                           style={{ borderColor: `${theme.preview.muted}25`, color: theme.preview.text }}
-                          title={`Copy ${token.color}`}
+                          title={`Salin ${token.color}`}
                         >
                           <span
                             className="h-4 w-4 rounded-full border shadow-sm"
@@ -973,7 +985,7 @@ export default function UiThemePage() {
                       className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-all hover:-translate-y-0.5 hover:shadow-sm"
                       style={{ borderColor: `${theme.preview.muted}25`, color: theme.preview.text }}
                     >
-                      <Copy className="h-3 w-3" /> JSON
+                      <Copy className="h-3 w-3" /> Export JSON
                     </button>
                     <button
                       type="button"
@@ -984,7 +996,7 @@ export default function UiThemePage() {
                       className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-all hover:-translate-y-0.5 hover:shadow-sm"
                       style={{ borderColor: `${theme.preview.muted}25`, color: theme.preview.text }}
                     >
-                      <Copy className="h-3 w-3" /> CSS
+                      <Copy className="h-3 w-3" /> Export CSS
                     </button>
                   </div>
                 </div>

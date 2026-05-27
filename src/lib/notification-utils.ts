@@ -120,6 +120,65 @@ function formatTelegramNotificationMessage(details: TelegramNotificationDetails)
   return message;
 }
 
+export interface LoginTelegramNotificationDetails {
+  username: string;
+  role?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  timestamp: Date;
+  twoFactorUsed?: boolean;
+}
+
+function formatLoginNotificationMessage(details: LoginTelegramNotificationDetails): string {
+  const time = escapeTelegramReservedChars(formatDateInTimezone(details.timestamp));
+  const userAgent = details.userAgent || 'Unknown UA';
+  const shortUserAgent = userAgent.length > 120 ? `${userAgent.slice(0, 117)}...` : userAgent;
+
+  let message = `*🔐 Login berhasil ePulsaku*\n\n`;
+  message += `👤 *User:* ${escapeTelegramReservedChars(details.username)}\n`;
+  if (details.role) {
+    message += `🛡️ *Role:* ${escapeTelegramReservedChars(details.role)}\n`;
+  }
+  message += `🌐 *IP:* ${escapeTelegramReservedChars(details.ipAddress || 'Unknown IP')}\n`;
+  message += `📱 *Perangkat:* ${escapeTelegramReservedChars(shortUserAgent)}\n`;
+  message += `🔑 *2FA:* ${details.twoFactorUsed ? 'Ya' : 'Tidak'}\n`;
+  message += `\n🕒 _${time}_`;
+
+  return message;
+}
+
+export async function trySendLoginTelegramNotification(details: LoginTelegramNotificationDetails) {
+  try {
+    const adminSettings = await getAdminSettingsFromDB();
+    if (!adminSettings.telegramBotToken || !adminSettings.telegramChatId) {
+      console.warn('[Telegram Login] Skipping notification: Telegram bot token or chat ID is not configured. User:', details.username);
+      return;
+    }
+
+    const messageContent = formatLoginNotificationMessage(details);
+    const chatIds = adminSettings.telegramChatId
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    for (const chatId of new Set(chatIds)) {
+      const result = await sendTelegramMessage({
+        botToken: adminSettings.telegramBotToken,
+        chatId,
+        message: messageContent,
+      });
+
+      if (result.success) {
+        console.log(`Telegram login notification sent to Chat ID ${chatId} for user: ${details.username}`);
+      } else {
+        console.warn(`Failed to send Telegram login notification to Chat ID ${chatId} for user ${details.username}: ${result.message}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error in trySendLoginTelegramNotification for event:', details, error);
+  }
+}
+
 export async function trySendTelegramNotification(details: TelegramNotificationDetails) {
   try {
     const adminSettings = await getAdminSettingsFromDB();

@@ -63,13 +63,19 @@ export async function POST(request: NextRequest) {
       internalStatus = 'Gagal';
     }
 
-    const updateResult = await updateTransactionInDB({
-      id: data.ref_id,
-      status: internalStatus,
-      serialNumber: data.sn || undefined,
-      failureReason: internalStatus === 'Gagal' ? data.message : undefined,
-      ...(typeof data.price === 'number' && { costPrice: data.price }),
-    });
+    const updateResult = await updateTransactionInDB(
+      {
+        id: data.ref_id,
+        status: internalStatus,
+        serialNumber: data.sn || undefined,
+        failureReason: internalStatus === 'Gagal' ? data.message : undefined,
+        ...(typeof data.price === 'number' && { costPrice: data.price }),
+      },
+      {
+        actorType: 'webhook',
+        source: 'webhook_digiflazz',
+      }
+    );
 
     if (updateResult.success) {
       console.log(`Transaction ${data.ref_id} updated via webhook to status: ${internalStatus}`);

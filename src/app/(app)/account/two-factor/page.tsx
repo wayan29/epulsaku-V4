@@ -1,12 +1,11 @@
-// src/app/(app)/account/change-password/page.tsx
 "use client";
 
-import ChangePasswordForm from "@/components/account/ChangePasswordForm";
+import TwoFactorSettingsForm from "@/components/account/TwoFactorSettingsForm";
 import { ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { redirect } from "next/navigation";
 
-export default function ChangePasswordPage() {
+export default function TwoFactorSettingsPage() {
   const { user } = useAuth();
 
   if (!user) {
@@ -24,20 +23,20 @@ export default function ChangePasswordPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ui-text-secondary)] dark:text-zinc-500">
-                Keamanan akun
+                Keamanan login
               </p>
               <h2 className="mt-2 text-xl font-bold tracking-tight text-[var(--ui-text)] dark:text-zinc-100 sm:text-2xl">
-                Ganti password akun
+                Autentikasi 2 faktor
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ui-text-muted)] dark:text-zinc-400 sm:text-base">
-                Perbarui password login untuk menjaga akses dashboard tetap aman. Gunakan password yang kuat dan berbeda dari layanan lain yang Anda pakai.
+                Hubungkan akun dengan aplikasi authenticator untuk menambahkan kode 6 digit setiap login.
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      <ChangePasswordForm />
+      <TwoFactorSettingsForm />
     </div>
   );
 }

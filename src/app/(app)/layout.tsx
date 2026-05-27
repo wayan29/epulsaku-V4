@@ -23,7 +23,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[var(--ui-surface)] text-[var(--ui-text)] dark:bg-zinc-950 dark:text-zinc-100">
         <Loader2 className="h-12 w-12 animate-spin text-[var(--ui-accent)]" />
-        <p className="mt-4 text-[var(--ui-text-muted)] dark:text-zinc-400">Checking session...</p>
+        <p className="mt-4 text-[var(--ui-text-muted)] dark:text-zinc-400">Memeriksa sesi akun...</p>
       </div>
     );
   }
@@ -37,7 +37,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
         <footer className="border-t border-[var(--ui-border)] py-6 text-center text-sm text-[var(--ui-text-muted)] dark:border-zinc-800 dark:text-zinc-400">
-          © {new Date().getFullYear()} ePulsaku. All rights reserved.
+          © {new Date().getFullYear()} ePulsaku. Dashboard operasional untuk tim transaksi.
         </footer>
       </div>
     );
